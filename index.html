@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Mobile Camera Pose Runner - Canvas Version</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(255,255,255,0.09);
+      --text: #f8fafc;
+      --muted: #cbd5e1;
+      --danger: #fb7185;
+      --good: #86efac;
+      --warn: #fde68a;
+      --safeTop: env(safe-area-inset-top, 0px);
+      --safeBottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      min-height: 100%;
+      background: radial-gradient(circle at top, #1e3a5f 0%, var(--bg) 58%, #020617 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+    }
+
+    body { overflow: hidden; }
+
+    #app {
+      width: 100vw;
+      height: 100dvh;
+      padding: calc(8px + var(--safeTop)) 8px calc(8px + var(--safeBottom));
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 8px;
+    }
+
+    #topBar {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 18px;
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 12px 28px rgba(0,0,0,0.25);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(16px, 4vw, 22px);
+      letter-spacing: -0.04em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .sub {
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #statusMini {
+      display: flex;
+      gap: 5px;
+      align-items: center;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .pill {
+      border-radius: 999px;
+      padding: 5px 8px;
+      background: rgba(255,255,255,0.12);
+      border: 1px solid rgba(255,255,255,0.08);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .ok { color: var(--good); }
+    .bad { color: var(--danger); }
+    .warn { color: var(--warn); }
+
+    #mainStage {
+      position: relative;
+      min-height: 0;
+      border-radius: 22px;
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-shadow: 0 18px 45px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+
+    #gameCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0f172a;
+    }
+
+    #cameraFloat {
+      position: absolute;
+      right: 8px;
+      top: 8px;
+      width: min(32vw, 150px);
+      aspect-ratio: 3 / 4;
+      border-radius: 18px;
+      overflow: hidden;
+      background: #020617;
+      border: 1px solid rgba(255,255,255,0.2);
+      box-shadow: 0 10px 28px rgba(0,0,0,0.38);
+      z-index: 5;
+    }
+
+    video, #poseCanvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      transform: scaleX(-1);
+    }
+
+    #poseCanvas { pointer-events: none; }
+
+    #hudFloat {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      z-index: 5;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      pointer-events: none;
+    }
+
+    .hudCard {
+      width: fit-content;
+      max-width: calc(100vw - 190px);
+      padding: 7px 9px;
+      border-radius: 14px;
+      background: rgba(2,6,23,0.62);
+      border: 1px solid rgba(255,255,255,0.14);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    #runMeter {
+      width: 118px;
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.15);
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    #runBar {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #86efac, #38bdf8, #facc15);
+      transition: width 0.08s linear;
+    }
+
+    #controlPanel {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .controlBlock {
+      border-radius: 20px;
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 8px;
+      box-shadow: 0 12px 28px rgba(0,0,0,0.22);
+    }
+
+    #actionButtons {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+
+    #moveButtons {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    button {
+      appearance: none;
+      border: 0;
+      border-radius: 16px;
+      min-height: 44px;
+      padding: 9px 8px;
+      color: #052033;
+      background: linear-gradient(135deg, #7dd3fc, #38bdf8);
+      font-weight: 900;
+      font-size: 13px;
+      cursor: pointer;
+      box-shadow: 0 10px 24px rgba(56,189,248,0.25);
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    button.secondary {
+      background: rgba(255,255,255,0.13);
+      color: var(--text);
+      box-shadow: none;
+      border: 1px solid rgba(255,255,255,0.14);
+    }
+
+    button.danger {
+      background: linear-gradient(135deg, #fda4af, #fb7185);
+      color: #3f0713;
+    }
+
+    button.warnBtn {
+      background: linear-gradient(135deg, #fde68a, #facc15);
+      color: #3f2b06;
+    }
+
+    button:active { transform: translateY(1px) scale(0.98); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+
+    .tiny {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.3;
+      margin-top: 5px;
+    }
+
+    #helpDrawer {
+      position: fixed;
+      left: 8px;
+      right: 8px;
+      bottom: calc(8px + var(--safeBottom));
+      z-index: 20;
+      max-height: 62dvh;
+      overflow: auto;
+      padding: 14px;
+      border-radius: 22px;
+      background: rgba(15,23,42,0.96);
+      border: 1px solid rgba(255,255,255,0.16);
+      box-shadow: 0 18px 50px rgba(0,0,0,0.45);
+      display: none;
+    }
+
+    #helpDrawer.open { display: block; }
+    #helpDrawer h2 { margin: 0 0 8px; font-size: 18px; }
+    #helpDrawer p { margin: 8px 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+
+    @media (orientation: landscape) and (max-height: 560px) {
+      #app {
+        grid-template-rows: auto 1fr;
+        grid-template-columns: 1fr 250px;
+        gap: 8px;
+      }
+
+      #topBar {
+        grid-column: 1 / -1;
+        padding: 6px 8px;
+      }
+
+      #controlPanel {
+        grid-template-columns: 1fr;
+        align-self: stretch;
+      }
+
+      #cameraFloat {
+        width: min(20vw, 120px);
+        aspect-ratio: 4 / 3;
+      }
+    }
+
+    @media (min-width: 900px) {
+      #app {
+        max-width: 1180px;
+        margin: 0 auto;
+        grid-template-columns: 1fr 320px;
+        grid-template-rows: auto 1fr;
+      }
+
+      #topBar { grid-column: 1 / -1; }
+      #controlPanel { grid-template-columns: 1fr; align-self: stretch; }
+      #cameraFloat { width: 180px; aspect-ratio: 4 / 3; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="topBar">
+      <div id="title">
+        <h1>Mobile Camera Pose Runner</h1>
+        <div class="sub">순수 Canvas 2D 버전 / 모바일 브라우저 대응</div>
+      </div>
+      <div id="statusMini">
+        <span id="cameraState" class="pill bad">CAM 대기</span>
+        <span id="poseState" class="pill bad">POSE 대기</span>
+        <span id="calibState" class="pill warn">CAL 필요</span>
+      </div>
+    </header>
+
+    <main id="mainStage">
+      <canvas id="gameCanvas"></canvas>
+
+      <div id="hudFloat">
+        <div class="hudCard">입력: <span id="gestureState">NONE</span></div>
+        <div class="hudCard">
+          달리기: <span id="runSpeedText">0%</span>
+          <div id="runMeter"><div id="runBar"></div></div>
+        </div>
+      </div>
+
+      <div id="cameraFloat">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="poseCanvas"></canvas>
+      </div>
+    </main>
+
+    <section id="controlPanel">
+      <div class="controlBlock">
+        <div id="moveButtons">
+          <button id="btnLeft" class="secondary">← 왼쪽</button>
+          <button id="btnRight" class="secondary">오른쪽 →</button>
+        </div>
+        <div class="tiny">카메라 인식이 흔들릴 때 터치로 백업 조작합니다.</div>
+      </div>
+
+      <div class="controlBlock">
+        <div id="actionButtons">
+          <button id="startBtn">카메라</button>
+          <button id="calibrateBtn" class="warnBtn" disabled>보정</button>
+          <button id="helpBtn" class="secondary">도움말</button>
+          <button id="btnJump" class="secondary">점프</button>
+          <button id="btnCrouch" class="secondary">앉기</button>
+          <button id="btnPunch" class="danger">펀치</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <aside id="helpDrawer">
+    <h2>핸드폰 테스트 방법</h2>
+    <p><b>1.</b> HTTPS 주소에서 실행하세요. GitHub Pages, Netlify, Vercel, ngrok 모두 가능합니다.</p>
+    <p><b>2.</b> 카메라 버튼을 누르고 권한을 허용합니다.</p>
+    <p><b>3.</b> 전신이 들어오게 1.5~2.5m 정도 떨어져 선 뒤 보정 버튼을 누릅니다.</p>
+    <p><b>4.</b> 제자리 달리기, 좌우 이동, 점프, 앉기, 펀치, 양팔 들기 포즈를 테스트합니다.</p>
+    <p><b>5.</b> 이번 버전은 Phaser를 제거하고 Canvas 2D로 직접 그리기 때문에 모바일에서 게임 화면이 더 안정적으로 표시됩니다.</p>
+    <button id="closeHelpBtn" class="secondary" style="width:100%; margin-top:8px;">닫기</button>
+  </aside>
+
+  <script type="module">
+    import {
+      PoseLandmarker,
+      FilesetResolver,
+      DrawingUtils
+    } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs";
+
+    const ui = {
+      startBtn: document.getElementById("startBtn"),
+      calibrateBtn: document.getElementById("calibrateBtn"),
+      helpBtn: document.getElementById("helpBtn"),
+      closeHelpBtn: document.getElementById("closeHelpBtn"),
+      helpDrawer: document.getElementById("helpDrawer"),
+      cameraState: document.getElementById("cameraState"),
+      poseState: document.getElementById("poseState"),
+      calibState: document.getElementById("calibState"),
+      gestureState: document.getElementById("gestureState"),
+      runSpeedText: document.getElementById("runSpeedText"),
+      runBar: document.getElementById("runBar"),
+      video: document.getElementById("webcam"),
+      poseCanvas: document.getElementById("poseCanvas"),
+      gameCanvas: document.getElementById("gameCanvas"),
+      btnLeft: document.getElementById("btnLeft"),
+      btnRight: document.getElementById("btnRight"),
+      btnJump: document.getElementById("btnJump"),
+      btnCrouch: document.getElementById("btnCrouch"),
+      btnPunch: document.getElementById("btnPunch")
+    };
+
+    const gameCtx = ui.gameCanvas.getContext("2d");
+    const poseCtx = ui.poseCanvas.getContext("2d");
+
+    const input = {
+      laneDelta: 0,
+      jump: false,
+      crouch: false,
+      punch: false,
+      pose: false,
+      runIntensity: 0,
+      lastGesture: "NONE",
+      mobile: { crouchHold: false }
+    };
+
+    const baseline = {
+      ready: false,
+      centerX: 0.5,
+      centerY: 0.5,
+      shoulderWidth: 0.22,
+      bodyHeight: 0.45
+    };
+
+    const history = {
+      center: [],
+      kneeY: [],
+      lastLaneTime: 0,
+      lastJumpTime: 0,
+      lastPunchTime: 0,
+      lastPoseTime: 0
+    };
+
+    const game = {
+      w: 450,
+      h: 680,
+      dpr: 1,
+      lanes: [128, 225, 322],
+      playerLane: 1,
+      playerX: 225,
+      playerY: 560,
+      targetX: 225,
+      visualY: 560,
+      score: 0,
+      health: 3,
+      speed: 165,
+      baseSpeed: 165,
+      spawnTimer: 0,
+      obstacles: [],
+      playerState: "RUN",
+      actionUntil: 0,
+      lastInput: { lane: 0, jump: 0, punch: 0, pose: 0 },
+      lastTime: performance.now(),
+      roadOffset: 0,
+      message: "",
+      messageTimer: 0
+    };
+
+    let poseLandmarker = null;
+    let drawingUtils = null;
+    let webcamReady = false;
+    let lastVideoTime = -1;
+    let frameSkip = 0;
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const now = () => performance.now();
+
+    function setPill(el, text, className) {
+      el.textContent = text;
+      el.className = "pill " + className;
+    }
+
+    function pushLimited(arr, item, max = 12) {
+      arr.push(item);
+      while (arr.length > max) arr.shift();
+    }
+
+    function vibrate(pattern) {
+      if (navigator.vibrate) navigator.vibrate(pattern);
+    }
+
+    function fireGesture(name, duration = 180) {
+      if (name === "LEFT") input.laneDelta = -1;
+      if (name === "RIGHT") input.laneDelta = 1;
+      if (name === "JUMP") input.jump = true;
+      if (name === "PUNCH") input.punch = true;
+      if (name === "POSE") input.pose = true;
+
+      input.lastGesture = name;
+      ui.gestureState.textContent = name;
+
+      setTimeout(() => {
+        if (name === "LEFT" || name === "RIGHT") input.laneDelta = 0;
+        if (name === "JUMP") input.jump = false;
+        if (name === "PUNCH") input.punch = false;
+        if (name === "POSE") input.pose = false;
+      }, duration);
+    }
+
+    function bindTapButton(button, gesture) {
+      button.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        vibrate(18);
+        fireGesture(gesture);
+      });
+    }
+
+    bindTapButton(ui.btnLeft, "LEFT");
+    bindTapButton(ui.btnRight, "RIGHT");
+    bindTapButton(ui.btnJump, "JUMP");
+    bindTapButton(ui.btnPunch, "PUNCH");
+
+    ui.btnCrouch.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      input.mobile.crouchHold = true;
+      input.crouch = true;
+      input.lastGesture = "CROUCH";
+      ui.gestureState.textContent = "CROUCH";
+      vibrate(18);
+    });
+
+    ui.btnCrouch.addEventListener("pointerup", () => {
+      input.mobile.crouchHold = false;
+      input.crouch = false;
+    });
+
+    ui.btnCrouch.addEventListener("pointercancel", () => {
+      input.mobile.crouchHold = false;
+      input.crouch = false;
+    });
+
+    ui.helpBtn.addEventListener("click", () => ui.helpDrawer.classList.add("open"));
+    ui.closeHelpBtn.addEventListener("click", () => ui.helpDrawer.classList.remove("open"));
+
+    function resizeGameCanvas() {
+      const rect = ui.gameCanvas.getBoundingClientRect();
+      game.dpr = Math.min(window.devicePixelRatio || 1, 2);
+      ui.gameCanvas.width = Math.floor(rect.width * game.dpr);
+      ui.gameCanvas.height = Math.floor(rect.height * game.dpr);
+      gameCtx.setTransform(game.dpr, 0, 0, game.dpr, 0, 0);
+      game.w = rect.width;
+      game.h = rect.height;
+
+      const center = game.w / 2;
+      const laneGap = Math.min(110, game.w * 0.22);
+      game.lanes = [center - laneGap, center, center + laneGap];
+      game.targetX = game.lanes[game.playerLane];
+      game.playerX += (game.targetX - game.playerX) * 0.4;
+      game.playerY = game.h - 95;
+    }
+
+    window.addEventListener("resize", resizeGameCanvas);
+    resizeGameCanvas();
+
+    function roundRect(ctx, x, y, w, h, r, fill) {
+      const rr = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + rr, y);
+      ctx.arcTo(x + w, y, x + w, y + h, rr);
+      ctx.arcTo(x + w, y + h, x, y + h, rr);
+      ctx.arcTo(x, y + h, x, y, rr);
+      ctx.arcTo(x, y, x + w, y, rr);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+
+    function drawTextCenter(text, x, y, size, color, weight = 900) {
+      gameCtx.font = `${weight} ${size}px system-ui, sans-serif`;
+      gameCtx.fillStyle = color;
+      gameCtx.textAlign = "center";
+      gameCtx.textBaseline = "middle";
+      gameCtx.fillText(text, x, y);
+    }
+
+    function drawGame() {
+      const ctx = gameCtx;
+      ctx.clearRect(0, 0, game.w, game.h);
+
+      const grd = ctx.createLinearGradient(0, 0, 0, game.h);
+      grd.addColorStop(0, "#0f172a");
+      grd.addColorStop(1, "#101827");
+      ctx.fillStyle = grd;
+      ctx.fillRect(0, 0, game.w, game.h);
+
+      const roadW = Math.min(game.w * 0.72, 460);
+      const roadX = (game.w - roadW) / 2;
+      roundRect(ctx, roadX, 16, roadW, game.h - 26, 24, "#101b31");
+      roundRect(ctx, roadX + 18, 36, roadW - 36, game.h - 66, 22, "#21314f");
+
+      ctx.save();
+      ctx.globalAlpha = 0.27;
+      ctx.fillStyle = "#f8fafc";
+      for (const x of [(game.lanes[0] + game.lanes[1]) / 2, (game.lanes[1] + game.lanes[2]) / 2]) {
+        for (let y = -40 + game.roadOffset % 52; y < game.h; y += 52) {
+          roundRect(ctx, x - 4, y, 8, 28, 4, "#f8fafc");
+        }
+      }
+      ctx.restore();
+
+      drawTextCenter("POSE RUNNER", game.w / 2, 34, 20, "#ffffff");
+
+      for (const o of game.obstacles) {
+        drawObstacle(o);
+      }
+
+      drawPlayer();
+
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      ctx.font = "900 24px system-ui, sans-serif";
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(String(Math.floor(game.score)), 18, 16);
+
+      ctx.font = "900 18px system-ui, sans-serif";
+      ctx.fillStyle = "#fb7185";
+      ctx.fillText("♥".repeat(Math.max(0, game.health)), 18, 46);
+
+      drawTextCenter(getActionLabel(), game.w / 2, 82, 16, "#cbd5e1", 800);
+
+      if (game.messageTimer > 0) {
+        ctx.save();
+        ctx.globalAlpha = clamp(game.messageTimer / 520, 0, 1);
+        drawTextCenter(game.message, game.w / 2, game.h * 0.48, 42, game.message === "GOOD" ? "#86efac" : game.message === "MISS" ? "#fb7185" : "#facc15");
+        ctx.restore();
+      }
+    }
+
+    function drawObstacle(o) {
+      const ctx = gameCtx;
+      ctx.save();
+      ctx.globalAlpha = o.alpha;
+
+      if (o.type === "jump") {
+        roundRect(ctx, o.x - 42, o.y - 20, 84, 40, 16, "#f97316");
+        drawTextCenter("JUMP", o.x, o.y, 14, "#fff");
+      } else if (o.type === "crouch") {
+        roundRect(ctx, o.x - 48, o.y - 16, 96, 32, 16, "#facc15");
+        drawTextCenter("DOWN", o.x, o.y, 14, "#1f2937");
+      } else if (o.type === "dodge") {
+        roundRect(ctx, o.x - 40, o.y - 40, 80, 80, 18, "#64748b");
+        drawTextCenter("MOVE", o.x, o.y, 14, "#fff");
+      } else if (o.type === "punch") {
+        ctx.beginPath();
+        ctx.arc(o.x, o.y, 36, 0, Math.PI * 2);
+        ctx.fillStyle = "#fb7185";
+        ctx.fill();
+        drawTextCenter("HIT", o.x, o.y, 15, "#fff");
+      } else {
+        drawStar(ctx, o.x, o.y, 5, 42, 21, "#c084fc");
+        drawTextCenter("POSE", o.x, o.y, 12, "#fff");
+      }
+
+      ctx.restore();
+    }
+
+    function drawStar(ctx, cx, cy, points, outer, inner, fill) {
+      ctx.beginPath();
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outer : inner;
+        const a = -Math.PI / 2 + i * Math.PI / points;
+        const x = cx + Math.cos(a) * r;
+        const y = cy + Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+    }
+
+    function drawPlayer() {
+      const ctx = gameCtx;
+      const x = game.playerX;
+      const y = game.visualY;
+      const t = performance.now();
+      const walk = Math.sin(t * 0.017 * (1 + input.runIntensity * 1.5));
+
+      ctx.save();
+
+      ctx.globalAlpha = 0.28;
+      ctx.fillStyle = "#000";
+      ctx.beginPath();
+      ctx.ellipse(x, y + 48, 38, 9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      let bodyScaleY = 1;
+      let headOffset = -36;
+      let leftArmAngle = 22 - walk * 15;
+      let rightArmAngle = -22 + walk * 15;
+      let leftLegAngle = 10 + walk * 18;
+      let rightLegAngle = -10 - walk * 18;
+
+      if (game.playerState === "CROUCH") {
+        bodyScaleY = 0.7;
+        headOffset = -25;
+        leftArmAngle = 75;
+        rightArmAngle = -75;
+      } else if (game.playerState === "JUMP") {
+        leftArmAngle = -60;
+        rightArmAngle = 60;
+      } else if (game.playerState === "PUNCH") {
+        leftArmAngle = 40;
+        rightArmAngle = -95;
+      } else if (game.playerState === "POSE") {
+        leftArmAngle = -145;
+        rightArmAngle = 145;
+      }
+
+      drawLimb(x - 17, y + 18, 14, 40, leftLegAngle, "#38bdf8");
+      drawLimb(x + 17, y + 18, 14, 40, rightLegAngle, "#38bdf8");
+
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.scale(1, bodyScaleY);
+      ctx.beginPath();
+      ctx.arc(0, 0, 29, 0, Math.PI * 2);
+      ctx.fillStyle = "#7dd3fc";
+      ctx.fill();
+      ctx.restore();
+
+      drawLimb(x - 27, y - 6, 13, 42, leftArmAngle, "#ffd6a5");
+      drawLimb(x + 27, y - 6, 13, 42, rightArmAngle, "#ffd6a5");
+
+      ctx.beginPath();
+      ctx.arc(x, y + headOffset, 18, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffd6a5";
+      ctx.fill();
+
+      ctx.restore();
+    }
+
+    function drawLimb(x, y, w, h, angleDeg, color) {
+      const ctx = gameCtx;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(angleDeg * Math.PI / 180);
+      roundRect(ctx, -w / 2, 0, w, h, w / 2, color);
+      ctx.restore();
+    }
+
+    function getActionLabel() {
+      if (game.playerState === "CROUCH") return "앉기";
+      if (game.playerState === "JUMP") return "점프";
+      if (game.playerState === "PUNCH") return "펀치";
+      if (game.playerState === "POSE") return "포즈";
+      if (!baseline.ready) return "카메라 시작 → 보정";
+      return input.lastGesture === "NONE" ? "달리기" : input.lastGesture;
+    }
+
+    function updateGame(dt, time) {
+      game.speed = game.baseSpeed + input.runIntensity * 210 + game.score * 0.025;
+      game.roadOffset += game.speed * dt;
+      game.score += dt * (8 + input.runIntensity * 18);
+
+      handleGameInput(time);
+
+      game.playerX += (game.targetX - game.playerX) * Math.min(1, dt * 12);
+
+      if (game.playerState === "JUMP") {
+        const jumpLeft = Math.max(0, game.actionUntil - time);
+        const phase = 1 - jumpLeft / 500;
+        const arc = Math.sin(phase * Math.PI);
+        game.visualY = game.playerY - arc * 90;
+      } else {
+        game.visualY += (game.playerY - game.visualY) * Math.min(1, dt * 12);
+      }
+
+      game.spawnTimer -= dt * 1000;
+      if (game.spawnTimer <= 0) {
+        spawnObstacle();
+        game.spawnTimer = 950 + Math.random() * 550;
+      }
+
+      for (let i = game.obstacles.length - 1; i >= 0; i--) {
+        const o = game.obstacles[i];
+        o.y += game.speed * dt;
+
+        if (!o.hit && o.y > game.h - 205 && o.y < game.h - 70 && o.lane === game.playerLane) {
+          resolveObstacle(o);
+        }
+
+        if (o.y > game.h + 80 || o.alpha <= 0.03) {
+          game.obstacles.splice(i, 1);
+        }
+      }
+
+      if (game.messageTimer > 0) game.messageTimer -= dt * 1000;
+    }
+
+    function handleGameInput(time) {
+      const laneDelta = input.laneDelta;
+
+      if (laneDelta !== 0 && time - game.lastInput.lane > 260) {
+        game.playerLane = clamp(game.playerLane + laneDelta, 0, 2);
+        game.targetX = game.lanes[game.playerLane];
+        game.lastInput.lane = time;
+        input.laneDelta = 0;
+      }
+
+      if (input.jump && time - game.lastInput.jump > 620) {
+        game.playerState = "JUMP";
+        game.actionUntil = time + 500;
+        game.lastInput.jump = time;
+        input.jump = false;
+      }
+
+      if (input.crouch) {
+        game.playerState = "CROUCH";
+        game.actionUntil = time + 170;
+      }
+
+      if (input.punch && time - game.lastInput.punch > 420) {
+        game.playerState = "PUNCH";
+        game.actionUntil = time + 320;
+        game.lastInput.punch = time;
+        input.punch = false;
+      }
+
+      if (input.pose && time - game.lastInput.pose > 760) {
+        game.playerState = "POSE";
+        game.actionUntil = time + 520;
+        game.lastInput.pose = time;
+        input.pose = false;
+      }
+
+      if (time > game.actionUntil && game.playerState !== "RUN") {
+        game.playerState = "RUN";
+      }
+    }
+
+    function spawnObstacle() {
+      const types = ["jump", "crouch", "dodge", "punch", "pose"];
+      const type = types[Math.floor(Math.random() * types.length)];
+      const lane = Math.floor(Math.random() * 3);
+      game.obstacles.push({
+        type,
+        lane,
+        x: game.lanes[lane],
+        y: -40,
+        hit: false,
+        alpha: 1
+      });
+    }
+
+    function resolveObstacle(o) {
+      let success = false;
+
+      if (o.type === "jump" && game.playerState === "JUMP") success = true;
+      if (o.type === "crouch" && game.playerState === "CROUCH") success = true;
+      if (o.type === "dodge") success = false;
+      if (o.type === "punch" && game.playerState === "PUNCH") success = true;
+      if (o.type === "pose" && game.playerState === "POSE") success = true;
+
+      o.hit = true;
+
+      if (success) {
+        game.score += 90;
+        game.message = "GOOD";
+        game.messageTimer = 520;
+        o.alpha = 0;
+        vibrate(25);
+      } else {
+        game.health -= 1;
+        game.message = "MISS";
+        game.messageTimer = 520;
+        o.alpha = 0.3;
+        vibrate(80);
+
+        if (game.health <= 0) {
+          game.health = 3;
+          game.score = 0;
+          game.obstacles.length = 0;
+          game.message = "RETRY";
+          game.messageTimer = 700;
+        }
+      }
+    }
+
+    function gameLoop(time) {
+      const dt = Math.min(0.033, (time - game.lastTime) / 1000);
+      game.lastTime = time;
+      updateGame(dt, time);
+      drawGame();
+      requestAnimationFrame(gameLoop);
+    }
+
+    requestAnimationFrame(gameLoop);
+
+    function avgPoint(points) {
+      const valid = points.filter(Boolean);
+      if (!valid.length) return { x: 0.5, y: 0.5, visibility: 0 };
+      return {
+        x: valid.reduce((s, p) => s + p.x, 0) / valid.length,
+        y: valid.reduce((s, p) => s + p.y, 0) / valid.length,
+        visibility: valid.reduce((s, p) => s + (p.visibility ?? 1), 0) / valid.length
+      };
+    }
+
+    function lm(landmarks, index) {
+      return landmarks[index];
+    }
+
+    function getBodyMetrics(landmarks) {
+      const leftShoulder = lm(landmarks, 11);
+      const rightShoulder = lm(landmarks, 12);
+      const leftHip = lm(landmarks, 23);
+      const rightHip = lm(landmarks, 24);
+      const leftKnee = lm(landmarks, 25);
+      const rightKnee = lm(landmarks, 26);
+      const leftWrist = lm(landmarks, 15);
+      const rightWrist = lm(landmarks, 16);
+
+      const shoulders = avgPoint([leftShoulder, rightShoulder]);
+      const hips = avgPoint([leftHip, rightHip]);
+      const knees = avgPoint([leftKnee, rightKnee]);
+      const center = avgPoint([leftShoulder, rightShoulder, leftHip, rightHip]);
+      const shoulderWidth = Math.abs(leftShoulder.x - rightShoulder.x);
+      const bodyHeight = Math.abs(shoulders.y - hips.y) + Math.abs(hips.y - knees.y);
+
+      return {
+        leftShoulder, rightShoulder, leftHip, rightHip,
+        leftKnee, rightKnee, leftWrist, rightWrist,
+        shoulders, hips, knees, center,
+        shoulderWidth, bodyHeight
+      };
+    }
+
+    function calibrateFromCurrent() {
+      if (!history.center.length) return;
+
+      const c = history.center[history.center.length - 1];
+      baseline.centerX = c.x;
+      baseline.centerY = c.y;
+      baseline.shoulderWidth = c.shoulderWidth || 0.22;
+      baseline.bodyHeight = c.bodyHeight || 0.45;
+      baseline.ready = true;
+
+      setPill(ui.calibState, "CAL 완료", "ok");
+      vibrate([30, 20, 30]);
+    }
+
+    function detectGesture(landmarks) {
+      const m = getBodyMetrics(landmarks);
+
+      pushLimited(history.center, {
+        x: m.center.x,
+        y: m.center.y,
+        shoulderWidth: m.shoulderWidth,
+        bodyHeight: m.bodyHeight,
+        time: now()
+      }, 18);
+
+      pushLimited(history.kneeY, {
+        y: (m.leftKnee.y + m.rightKnee.y) / 2,
+        diff: Math.abs(m.leftKnee.y - m.rightKnee.y),
+        time: now()
+      }, 18);
+
+      const gestureNames = [];
+      const t = now();
+
+      const baseX = baseline.ready ? baseline.centerX : 0.5;
+      const baseY = baseline.ready ? baseline.centerY : m.center.y;
+      const bodyScale = clamp(baseline.bodyHeight || m.bodyHeight || 0.45, 0.25, 0.7);
+
+      const sideThreshold = 0.15;
+      const jumpThreshold = bodyScale * 0.12;
+      const crouchThreshold = bodyScale * 0.14;
+
+      input.laneDelta = 0;
+      input.jump = false;
+      if (!input.mobile.crouchHold) input.crouch = false;
+      input.punch = false;
+      input.pose = false;
+
+      const dx = m.center.x - baseX;
+      const dy = m.center.y - baseY;
+
+      if (baseline.ready && t - history.lastLaneTime > 500) {
+        if (dx < -sideThreshold) {
+          input.laneDelta = -1;
+          history.lastLaneTime = t;
+          gestureNames.push("LEFT");
+        } else if (dx > sideThreshold) {
+          input.laneDelta = 1;
+          history.lastLaneTime = t;
+          gestureNames.push("RIGHT");
+        }
+      }
+
+      if (baseline.ready && dy < -jumpThreshold && t - history.lastJumpTime > 750) {
+        input.jump = true;
+        history.lastJumpTime = t;
+        gestureNames.push("JUMP");
+      }
+
+      if (baseline.ready && dy > crouchThreshold) {
+        input.crouch = true;
+        gestureNames.push("CROUCH");
+      }
+
+      const leftArmUp = m.leftWrist.y < m.leftShoulder.y - 0.07;
+      const rightArmUp = m.rightWrist.y < m.rightShoulder.y - 0.07;
+
+      if (leftArmUp && rightArmUp && t - history.lastPoseTime > 950) {
+        input.pose = true;
+        history.lastPoseTime = t;
+        gestureNames.push("POSE");
+      }
+
+      const leftPunch = m.leftWrist.x > m.leftShoulder.x + 0.22 && Math.abs(m.leftWrist.y - m.leftShoulder.y) < 0.25;
+      const rightPunch = m.rightWrist.x < m.rightShoulder.x - 0.22 && Math.abs(m.rightWrist.y - m.rightShoulder.y) < 0.25;
+
+      if ((leftPunch || rightPunch) && t - history.lastPunchTime > 520) {
+        input.punch = true;
+        history.lastPunchTime = t;
+        gestureNames.push("PUNCH");
+      }
+
+      let runIntensity = 0;
+      if (history.kneeY.length >= 8) {
+        const recent = history.kneeY.slice(-8);
+        const avg = recent.reduce((s, p) => s + p.diff, 0) / recent.length;
+        const variance = recent.reduce((s, p) => s + Math.abs(p.diff - avg), 0) / recent.length;
+        runIntensity = clamp((variance - 0.01) / 0.075, 0, 1);
+      }
+
+      input.runIntensity = runIntensity;
+      ui.runSpeedText.textContent = Math.round(runIntensity * 100) + "%";
+      ui.runBar.style.width = Math.round(runIntensity * 100) + "%";
+
+      input.lastGesture = gestureNames.join(" + ") || (runIntensity > 0.2 ? "RUN" : "NONE");
+      ui.gestureState.textContent = input.lastGesture;
+    }
+
+    function drawPose(landmarks) {
+      const rect = ui.poseCanvas.getBoundingClientRect();
+      const w = ui.poseCanvas.width = Math.max(96, Math.floor(rect.width * 0.75));
+      const h = ui.poseCanvas.height = Math.max(128, Math.floor(rect.height * 0.75));
+      poseCtx.clearRect(0, 0, w, h);
+
+      if (!landmarks || !drawingUtils) return;
+
+      drawingUtils.drawConnectors(landmarks, PoseLandmarker.POSE_CONNECTIONS, {
+        color: "#38bdf8",
+        lineWidth: 2
+      });
+
+      drawingUtils.drawLandmarks(landmarks, {
+        color: "#86efac",
+        lineWidth: 1,
+        radius: 2
+      });
+    }
+
+    async function initPose() {
+      setPill(ui.poseState, "POSE 로딩", "warn");
+
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm"
+      );
+
+      poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",
+          delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numPoses: 1,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5
+      });
+
+      drawingUtils = new DrawingUtils(poseCtx);
+      setPill(ui.poseState, "POSE 준비", "ok");
+    }
+
+    async function startCamera() {
+      try {
+        ui.startBtn.disabled = true;
+        setPill(ui.cameraState, "CAM 권한", "warn");
+
+        if (!poseLandmarker) await initPose();
+
+        const isPortrait = window.innerHeight > window.innerWidth;
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            width: { ideal: isPortrait ? 360 : 480 },
+            height: { ideal: isPortrait ? 640 : 360 },
+            facingMode: "user",
+            frameRate: { ideal: 24, max: 30 }
+          },
+          audio: false
+        });
+
+        ui.video.srcObject = stream;
+
+        await new Promise(resolve => {
+          ui.video.onloadedmetadata = () => resolve();
+        });
+
+        await ui.video.play();
+
+        webcamReady = true;
+        ui.calibrateBtn.disabled = false;
+        setPill(ui.cameraState, "CAM 작동", "ok");
+        requestAnimationFrame(poseLoop);
+      } catch (err) {
+        console.error(err);
+        setPill(ui.cameraState, "CAM 실패", "bad");
+        setPill(ui.poseState, "POSE 확인", "bad");
+        ui.startBtn.disabled = false;
+        alert("카메라를 시작하지 못했습니다. HTTPS 주소에서 열고, 브라우저 카메라 권한을 허용해 주세요.");
+      }
+    }
+
+    function poseLoop() {
+      if (!webcamReady || !poseLandmarker) return;
+
+      frameSkip = (frameSkip + 1) % 2;
+
+      if (frameSkip === 0 && ui.video.currentTime !== lastVideoTime) {
+        lastVideoTime = ui.video.currentTime;
+
+        const result = poseLandmarker.detectForVideo(ui.video, performance.now());
+        const landmarks = result.landmarks?.[0];
+
+        if (landmarks) {
+          setPill(ui.poseState, "POSE 인식", "ok");
+          drawPose(landmarks);
+          detectGesture(landmarks);
+        } else {
+          setPill(ui.poseState, "사람 없음", "warn");
+          ui.gestureState.textContent = "NO PERSON";
+          poseCtx.clearRect(0, 0, ui.poseCanvas.width, ui.poseCanvas.height);
+        }
+      }
+
+      requestAnimationFrame(poseLoop);
+    }
+
+    ui.startBtn.addEventListener("click", startCamera);
+    ui.calibrateBtn.addEventListener("click", calibrateFromCurrent);
+  </script>
+</body>
+</html>
