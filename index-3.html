@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Interactive Exercise Chase Runner v7</title>
+  <style>
+    :root{
+      --bg:#08111f;
+      --panel:rgba(255,255,255,.10);
+      --text:#f8fafc;
+      --muted:#cbd5e1;
+      --good:#86efac;
+      --warn:#fde68a;
+      --bad:#fb7185;
+      --safeTop:env(safe-area-inset-top,0px);
+      --safeBottom:env(safe-area-inset-bottom,0px);
+    }
+    *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+    html,body{
+      margin:0;width:100%;height:100%;
+      background:#07101f;color:var(--text);
+      font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+      overflow:hidden;touch-action:manipulation;overscroll-behavior:none;
+    }
+    #app{
+      width:100vw;height:100dvh;
+      padding:calc(6px + var(--safeTop)) 6px calc(6px + var(--safeBottom));
+      display:grid;grid-template-rows:auto 1fr auto;gap:6px;
+      background:radial-gradient(circle at top,#1e4b78 0%,#0c1729 55%,#030712 100%);
+    }
+    #topBar{
+      display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;
+      padding:8px 10px;border-radius:18px;
+      background:linear-gradient(135deg,rgba(56,189,248,.18),rgba(255,255,255,.08));
+      border:1px solid rgba(255,255,255,.14);
+      box-shadow:0 10px 28px rgba(0,0,0,.25);
+    }
+    h1{margin:0;font-size:clamp(16px,4vw,22px);letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .sub{margin-top:1px;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #statusMini{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+    .pill{padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.1);font-size:11px;font-weight:900;white-space:nowrap}
+    .ok{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+    #stage{
+      position:relative;min-height:0;border-radius:22px;overflow:hidden;
+      border:1px solid rgba(255,255,255,.14);
+      background:#0f172a;box-shadow:0 18px 48px rgba(0,0,0,.38);
+    }
+    #gameCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1}
+    #cameraFloat{
+      position:absolute;right:8px;top:8px;width:min(22vw,108px);aspect-ratio:3/4;z-index:8;
+      border-radius:16px;overflow:hidden;background:#020617;border:1px solid rgba(255,255,255,.22);
+      box-shadow:0 10px 30px rgba(0,0,0,.35);
+      opacity:.92;
+    }
+    video,#poseCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+    #poseCanvas{pointer-events:none}
+    #hud{
+      position:absolute;left:8px;top:8px;z-index:7;
+      display:flex;flex-direction:column;gap:5px;pointer-events:none;
+    }
+    .hudCard{
+      width:fit-content;max-width:calc(100vw - 160px);
+      padding:7px 9px;border-radius:14px;background:rgba(2,6,23,.50);
+      border:1px solid rgba(255,255,255,.13);backdrop-filter:blur(8px);
+      font-size:12px;font-weight:900;line-height:1.25;
+    }
+    #runMeter{width:120px;height:8px;border-radius:999px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:4px}
+    #runBar{height:100%;width:0%;background:linear-gradient(90deg,#86efac,#38bdf8,#facc15);border-radius:999px}
+    #controlPanel{display:grid;grid-template-columns:1fr 1.05fr;gap:6px}
+    .controlBlock{
+      padding:7px;border-radius:18px;background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.13);box-shadow:0 10px 26px rgba(0,0,0,.22);
+    }
+    #moveButtons{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+    #actionButtons{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+    button{
+      appearance:none;border:0;min-height:43px;border-radius:15px;
+      padding:8px;color:#052033;background:linear-gradient(135deg,#7dd3fc,#38bdf8);
+      font-weight:1000;font-size:13px;box-shadow:0 10px 24px rgba(56,189,248,.25);
+      touch-action:manipulation;user-select:none;
+    }
+    button.secondary{background:rgba(255,255,255,.13);color:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:none}
+    button.warnBtn{background:linear-gradient(135deg,#fde68a,#facc15);color:#3f2b06}
+    button.danger{background:linear-gradient(135deg,#fda4af,#fb7185);color:#3f0713}
+    button:active{transform:translateY(1px) scale(.98)}
+    .tiny{font-size:10px;color:var(--muted);line-height:1.25;margin-top:5px}
+    #helpDrawer{
+      position:fixed;left:8px;right:8px;bottom:calc(8px + var(--safeBottom));
+      z-index:30;display:none;max-height:62dvh;overflow:auto;
+      padding:14px;border-radius:22px;background:rgba(15,23,42,.96);
+      border:1px solid rgba(255,255,255,.16);box-shadow:0 18px 50px rgba(0,0,0,.45);
+    }
+    #helpDrawer.open{display:block}
+    #helpDrawer h2{margin:0 0 8px;font-size:18px}
+    #helpDrawer p{margin:8px 0;color:var(--muted);font-size:13px;line-height:1.5}
+    @media (orientation:landscape) and (max-height:560px){
+      #app{grid-template-rows:auto 1fr;grid-template-columns:1fr 252px}
+      #topBar{grid-column:1/-1}
+      #controlPanel{grid-template-columns:1fr;align-self:stretch}
+      #cameraFloat{width:min(16vw,94px);aspect-ratio:4/3}
+    }
+    @media (min-width:900px){
+      #app{max-width:1180px;margin:0 auto;grid-template-columns:1fr 320px;grid-template-rows:auto 1fr}
+      #topBar{grid-column:1/-1}
+      #controlPanel{grid-template-columns:1fr;align-self:stretch}
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <header id="topBar">
+      <div>
+        <h1>Interactive Exercise Chase v7</h1>
+        <div class="sub">달려야 진행 / 멈추면 정지 / 큰 지시 카드 / 카툰 추격 연출</div>
+      </div>
+      <div id="statusMini">
+        <span id="cameraState" class="pill bad">CAM 대기</span>
+        <span id="poseState" class="pill bad">POSE 대기</span>
+        <span id="calibState" class="pill warn">CAL 필요</span>
+      </div>
+    </header>
+
+    <main id="stage">
+      <canvas id="gameCanvas"></canvas>
+      <div id="hud">
+        <div class="hudCard">입력: <span id="gestureState">NONE</span></div>
+        <div class="hudCard">달리기: <span id="runSpeedText">0%</span><div id="runMeter"><div id="runBar"></div></div></div>
+      </div>
+      <div id="cameraFloat">
+        <video id="webcam" autoplay playsinline muted></video>
+        <canvas id="poseCanvas"></canvas>
+      </div>
+    </main>
+
+    <section id="controlPanel">
+      <div class="controlBlock">
+        <div id="moveButtons">
+          <button id="btnLeft" class="secondary">← 왼쪽</button>
+          <button id="btnRight" class="secondary">오른쪽 →</button>
+        </div>
+        <div class="tiny">카메라 인식이 틀려도 버튼으로 바로 조작됩니다.</div>
+      </div>
+      <div class="controlBlock">
+        <div id="actionButtons">
+          <button id="startBtn">시작</button>
+          <button id="calibrateBtn" class="warnBtn">보정</button>
+          <button id="helpBtn" class="secondary">도움말</button>
+          <button id="btnJump" class="secondary">점프</button>
+          <button id="btnCrouch" class="secondary">앉기</button>
+          <button id="btnPunch" class="danger">펀치</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <aside id="helpDrawer">
+    <h2>v7 방향</h2>
+    <p>이 버전은 <b>제자리 달리기 입력이 들어올 때만</b> 배경, 미션, 점수가 진행됩니다.</p>
+    <p>달리기를 멈추면 게임도 멈추고, 다시 달리면 이어서 진행됩니다. 점프, 앉기, 좌우 피하기, 펀치, 포즈는 미션 입력으로 처리됩니다.</p>
+    <p>저작권 캐릭터는 그대로 쓰지 않고, 카툰 추격 운동 게임 느낌으로 구성했습니다.</p>
+    <p>GitHub Pages에 올린 뒤 <b>?v=7</b>을 붙여 접속하세요.</p>
+    <button id="closeHelpBtn" class="secondary" style="width:100%;margin-top:8px">닫기</button>
+  </aside>
+
+  <script type="module">
+    import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs";
+
+    const $=id=>document.getElementById(id);
+    const ui={
+      canvas:$("gameCanvas"), video:$("webcam"), poseCanvas:$("poseCanvas"),
+      startBtn:$("startBtn"), calibrateBtn:$("calibrateBtn"), helpBtn:$("helpBtn"), closeHelpBtn:$("closeHelpBtn"), helpDrawer:$("helpDrawer"),
+      cameraState:$("cameraState"), poseState:$("poseState"), calibState:$("calibState"),
+      gestureState:$("gestureState"), runSpeedText:$("runSpeedText"), runBar:$("runBar"),
+      btnLeft:$("btnLeft"),btnRight:$("btnRight"),btnJump:$("btnJump"),btnCrouch:$("btnCrouch"),btnPunch:$("btnPunch")
+    };
+    const ctx=ui.canvas.getContext("2d"), poseCtx=ui.poseCanvas.getContext("2d");
+
+    const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
+    const lerp=(a,b,t)=>a+(b-a)*t;
+    const now=()=>performance.now();
+    const setPill=(el,t,c)=>{el.textContent=t;el.className="pill "+c};
+    const vibrate=p=>{if(navigator.vibrate)navigator.vibrate(p)};
+    const push=(a,x,m=18)=>{a.push(x);while(a.length>m)a.shift()};
+
+    const input={laneDelta:0,jump:false,crouch:false,punch:false,pose:false,runIntensity:0,lastGesture:"NONE",mobile:{crouchHold:false}};
+    const baseline={ready:false,centerX:.5,centerY:.5,bodyHeight:.45};
+    const hist={center:[],kneeY:[],lastLane:0,lastJump:0,lastPunch:0,lastPose:0};
+
+    const game={
+      w:1,h:1,dpr:1,running:false,started:false,
+      lane:1,targetLane:1,laneVisual:1,
+      score:0,streak:0,miss:0,
+      mission:null,nextMission:.2,missionTime:0,
+      state:"RUN",actionUntil:0,lastAction:{lane:0,jump:0,punch:0,pose:0},
+      message:"시작 버튼을 누르세요",messageTime:999999,
+      bgOffset:0,last:performance.now(),
+      mascotX:0,mascotBounce:0
+    };
+
+    let poseLandmarker=null,drawingUtils=null,webcamReady=false,lastVideoTime=-1,poseSkip=0;
+
+    function resize(){
+      const r=ui.canvas.getBoundingClientRect();
+      game.dpr=Math.min(devicePixelRatio||1,2);
+      game.w=Math.max(1,r.width);game.h=Math.max(1,r.height);
+      ui.canvas.width=Math.floor(game.w*game.dpr);ui.canvas.height=Math.floor(game.h*game.dpr);
+      ctx.setTransform(game.dpr,0,0,game.dpr,0,0);
+    }
+    addEventListener("resize",resize);setTimeout(resize,50);setTimeout(resize,300);resize();
+
+    function startGame(){
+      game.running=true;game.started=true;game.score=0;game.streak=0;game.miss=0;game.nextMission=.25;game.mission=null;
+      game.message="제자리 달리기 시작!";game.messageTime=999999;
+      ui.startBtn.textContent="재시작";
+      startCameraSoft();
+      vibrate([30,20,30]);
+    }
+    ui.startBtn.addEventListener("click",startGame);
+
+    function fire(name,dur=180){
+      if(name==="LEFT")input.laneDelta=-1;
+      if(name==="RIGHT")input.laneDelta=1;
+      if(name==="JUMP")input.jump=true;
+      if(name==="PUNCH")input.punch=true;
+      if(name==="POSE")input.pose=true;
+      input.lastGesture=name;ui.gestureState.textContent=name;
+      setTimeout(()=>{
+        if(name==="LEFT"||name==="RIGHT")input.laneDelta=0;
+        if(name==="JUMP")input.jump=false;
+        if(name==="PUNCH")input.punch=false;
+        if(name==="POSE")input.pose=false;
+      },dur);
+    }
+    const bind=(btn,name)=>btn.addEventListener("pointerdown",e=>{e.preventDefault();vibrate(18);fire(name)});
+    bind(ui.btnLeft,"LEFT");bind(ui.btnRight,"RIGHT");bind(ui.btnJump,"JUMP");bind(ui.btnPunch,"PUNCH");
+    ui.btnCrouch.addEventListener("pointerdown",e=>{e.preventDefault();input.mobile.crouchHold=true;input.crouch=true;input.lastGesture="CROUCH";ui.gestureState.textContent="CROUCH";vibrate(18)});
+    ui.btnCrouch.addEventListener("pointerup",()=>{input.mobile.crouchHold=false;input.crouch=false});
+    ui.btnCrouch.addEventListener("pointercancel",()=>{input.mobile.crouchHold=false;input.crouch=false});
+    ui.helpBtn.addEventListener("click",()=>ui.helpDrawer.classList.add("open"));
+    ui.closeHelpBtn.addEventListener("click",()=>ui.helpDrawer.classList.remove("open"));
+
+    function rr(x,y,w,h,r,c){
+      const q=Math.min(r,w/2,h/2);
+      ctx.beginPath();ctx.moveTo(x+q,y);ctx.arcTo(x+w,y,x+w,y+h,q);ctx.arcTo(x+w,y+h,x,y+h,q);ctx.arcTo(x,y+h,x,y,q);ctx.arcTo(x,y,x+w,y,q);ctx.closePath();ctx.fillStyle=c;ctx.fill();
+    }
+    function text(t,x,y,s,c,w=900,a="center"){
+      ctx.font=`${w} ${s}px system-ui,sans-serif`;ctx.fillStyle=c;ctx.textAlign=a;ctx.textBaseline="middle";ctx.fillText(t,x,y);
+    }
+    function circle(x,y,r,c){ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fillStyle=c;ctx.fill()}
+    function ellipse(x,y,rx,ry,c){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);ctx.fillStyle=c;ctx.fill()}
+
+    const missionInfo={
+      jump:{ko:"점프!",en:"JUMP",color:"#fb923c",icon:"hurdle"},
+      crouch:{ko:"숙여!",en:"DUCK",color:"#facc15",icon:"bar"},
+      left:{ko:"왼쪽!",en:"LEFT",color:"#60a5fa",icon:"arrowL"},
+      right:{ko:"오른쪽!",en:"RIGHT",color:"#60a5fa",icon:"arrowR"},
+      punch:{ko:"펀치!",en:"PUNCH",color:"#fb7185",icon:"target"},
+      pose:{ko:"포즈!",en:"POSE",color:"#c084fc",icon:"star"}
+    };
+
+    function draw(){
+      ctx.clearRect(0,0,game.w,game.h);
+      drawBackground();
+      drawChaseRoad();
+      drawMascotChaser();
+      drawPlayerAvatar();
+      drawMissionObjects();
+      drawPromptCard();
+      drawScore();
+      if(game.messageTime>0)drawMessage();
+    }
+
+    function drawBackground(){
+      const g=ctx.createLinearGradient(0,0,0,game.h);
+      g.addColorStop(0,"#72d7ff");g.addColorStop(.38,"#53a7e8");g.addColorStop(.39,"#3fb66b");g.addColorStop(1,"#17613b");
+      ctx.fillStyle=g;ctx.fillRect(0,0,game.w,game.h);
+
+      // soft clouds
+      ctx.save();ctx.globalAlpha=.55;
+      for(let i=0;i<5;i++){
+        const x=(i*170-game.bgOffset*18)%(game.w+220)-80;
+        const y=35+(i%3)*30;
+        circle(x,y,24,"#fff");circle(x+26,y-10,30,"#fff");circle(x+58,y,22,"#fff");
+      }
+      ctx.restore();
+
+      // side scenery
+      const y0=game.h*.42;
+      for(let i=0;i<9;i++){
+        const p=(i/8+game.bgOffset*.04)%1;
+        const side=i%2===0?-1:1;
+        const y=lerp(y0,game.h+40,p);
+        const scale=lerp(.2,1.4,p);
+        const x=game.w/2+side*lerp(game.w*.18,game.w*.48,p);
+        drawTree(x,y,scale);
+      }
+    }
+
+    function drawTree(x,y,s){
+      ctx.save();
+      rr(x-8*s,y-42*s,16*s,55*s,8*s,"#8b5a2b");
+      circle(x,y-58*s,28*s,"#22c55e");
+      circle(x-20*s,y-48*s,22*s,"#16a34a");
+      circle(x+20*s,y-46*s,24*s,"#4ade80");
+      ctx.restore();
+    }
+
+    function drawChaseRoad(){
+      const w=game.w,h=game.h,c=w/2,top=h*.25,bottom=h+70;
+      ctx.beginPath();
+      ctx.moveTo(c-45,top);ctx.lineTo(w*.11,bottom);ctx.lineTo(w*.89,bottom);ctx.lineTo(c+45,top);ctx.closePath();
+      const road=ctx.createLinearGradient(0,top,0,bottom);
+      road.addColorStop(0,"#536b84");road.addColorStop(1,"#2f4058");
+      ctx.fillStyle=road;ctx.fill();
+      ctx.strokeStyle="rgba(255,255,255,.28)";ctx.lineWidth=3;ctx.stroke();
+
+      // dashed lane lines perspective
+      ctx.save();
+      ctx.strokeStyle="rgba(255,255,255,.50)";
+      ctx.lineWidth=8;
+      ctx.setLineDash([34,34]);
+      ctx.lineDashOffset=-(game.bgOffset*240)%68;
+      for(const off of [-.33,.33]){
+        ctx.beginPath();
+        ctx.moveTo(c+off*32,top+25);
+        ctx.lineTo(c+off*w*.27,bottom);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // finish/motion stripes
+      ctx.save();ctx.globalAlpha=.16;ctx.strokeStyle="#fff";ctx.lineWidth=2;
+      for(let i=0;i<12;i++){
+        const p=(i/12+game.bgOffset*.18)%1;
+        const y=lerp(top,bottom,p);
+        const half=lerp(40,w*.38,p);
+        ctx.beginPath();ctx.moveTo(c-half,y);ctx.lineTo(c+half,y);ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function roadPoint(lane,depth){
+      const c=game.w/2, top=game.h*.25, bottom=game.h+70;
+      const t=Math.pow(depth,1.35);
+      const y=lerp(top,bottom,t);
+      const spread=lerp(42,game.w*.32,t);
+      const x=c+(lane-1)*spread;
+      const s=lerp(.25,1.45,t);
+      return{x,y,s,t};
+    }
+
+    function drawMascotChaser(){
+      // cute non-copyright cartoon chaser behind player
+      const p=roadPoint(1,.78);
+      const x=p.x+game.w*.20*Math.sin(game.bgOffset*2.4), y=p.y+12, s=p.s*.58;
+      ctx.save();ctx.globalAlpha=.95;
+      ellipse(x,y+54*s,52*s,12*s,"rgba(0,0,0,.22)");
+      circle(x,y-22*s,42*s,"#fbbf24");
+      circle(x-24*s,y-55*s,17*s,"#fbbf24");
+      circle(x+24*s,y-55*s,17*s,"#fbbf24");
+      circle(x-13*s,y-27*s,5*s,"#111827");circle(x+13*s,y-27*s,5*s,"#111827");
+      rr(x-7*s,y-17*s,14*s,10*s,5*s,"#111827");
+      rr(x-40*s,y+15*s,80*s,64*s,28*s,"#f59e0b");
+      text("CHASE",x,y+42*s,10*s,"#fff",1000);
+      ctx.restore();
+    }
+
+    function drawPlayerAvatar(){
+      const p=roadPoint(game.laneVisual,.90);
+      let x=p.x,y=p.y,s=p.s*.82;
+      const t=now();
+      let jump=0,crouch=0,armMode="run";
+      if(game.state==="JUMP"){
+        const phase=1-Math.max(0,game.actionUntil-t)/520;
+        jump=Math.sin(phase*Math.PI)*game.h*.18;
+      }
+      if(game.state==="CROUCH")crouch=38*s;
+      if(game.state==="PUNCH")armMode="punch";
+      if(game.state==="POSE")armMode="pose";
+      y-=jump;
+      const runBob=Math.sin(t*.02*(1+input.runIntensity*2))*7*s;
+
+      ctx.save();
+      ellipse(x,y+96*s,64*s,16*s,"rgba(0,0,0,.25)");
+      // legs
+      rr(x-29*s,y+46*s+crouch,22*s,74*s,11*s,"#0ea5e9");
+      rr(x+8*s,y+46*s-crouch*.1,22*s,74*s,11*s,"#38bdf8");
+      // body
+      ctx.beginPath();ctx.ellipse(x,y+12*s+crouch,46*s,62*s*(game.state==="CROUCH"?.65:1),0,0,Math.PI*2);
+      const bg=ctx.createRadialGradient(x-18*s,y-10*s+crouch,4,x,y+12*s+crouch,70*s);
+      bg.addColorStop(0,"#e0f7ff");bg.addColorStop(1,"#38bdf8");ctx.fillStyle=bg;ctx.fill();
+      // arms
+      if(armMode==="pose"){
+        rr(x-68*s,y-94*s,20*s,92*s,10*s,"#ffd6a5");
+        rr(x+48*s,y-94*s,20*s,92*s,10*s,"#ffd6a5");
+      }else if(armMode==="punch"){
+        rr(x-70*s,y-5*s,20*s,78*s,10*s,"#ffd6a5");
+        rr(x+36*s,y-50*s,24*s,110*s,12*s,"#ffd6a5");
+        circle(x+48*s,y-58*s,24*s,"#fb7185");
+      }else{
+        rr(x-70*s,y+6*s+crouch+runBob,22*s,76*s,11*s,"#ffd6a5");
+        rr(x+48*s,y+6*s+crouch-runBob,22*s,76*s,11*s,"#ffd6a5");
+      }
+      // head
+      ctx.beginPath();ctx.arc(x,y-68*s+crouch,35*s,0,Math.PI*2);
+      const hg=ctx.createRadialGradient(x-12*s,y-82*s+crouch,4,x,y-68*s+crouch,42*s);
+      hg.addColorStop(0,"#ffe7bd");hg.addColorStop(1,"#ffbd73");ctx.fillStyle=hg;ctx.fill();
+      // face
+      circle(x-10*s,y-72*s+crouch,3.3*s,"#1f2937");circle(x+10*s,y-72*s+crouch,3.3*s,"#1f2937");
+      ctx.restore();
+    }
+
+    function drawMissionObjects(){
+      if(!game.mission)return;
+      const m=game.mission;
+      const info=missionInfo[m.type];
+      const p=roadPoint(m.lane,m.depth);
+      const x=p.x,y=p.y,s=p.s;
+      ctx.save();ctx.globalAlpha=.95;
+      if(m.type==="jump"){
+        rr(x-60*s,y-16*s,120*s,32*s,14*s,"#ea580c");
+        rr(x-52*s,y-31*s,104*s,28*s,14*s,"#fdba74");
+        text("JUMP",x,y-16*s,14*s,"#fff",1000);
+      }else if(m.type==="crouch"){
+        rr(x-95*s,y-108*s,190*s,28*s,14*s,"#facc15");
+        rr(x-80*s,y-88*s,160*s,34*s,16*s,"#fde68a");
+        text("DOWN",x,y-72*s,14*s,"#3f2b06",1000);
+      }else if(m.type==="left"||m.type==="right"){
+        const dir=m.type==="left"?-1:1;
+        rr(x-54*s,y-72*s,108*s,132*s,26*s,"#334155");
+        rr(x-42*s,y-60*s,84*s,108*s,22*s,"#64748b");
+        text(dir<0?"←":"→",x,y-8*s,48*s,"#fff",1000);
+      }else if(m.type==="punch"){
+        circle(x,y-38*s,44*s,"#fb7185");
+        rr(x-50*s,y-3*s,100*s,76*s,28*s,"#e11d48");
+        text("HIT",x,y+35*s,18*s,"#fff",1000);
+      }else if(m.type==="pose"){
+        star(x,y,5,78*s,36*s,"#a855f7");
+        text("POSE",x,y+18*s,15*s,"#fff",1000);
+      }
+      ctx.restore();
+    }
+
+    function star(cx,cy,points,outer,inner,c){
+      ctx.beginPath();
+      for(let i=0;i<points*2;i++){
+        const r=i%2===0?outer:inner;
+        const a=-Math.PI/2+i*Math.PI/points;
+        const x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+        if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+      }
+      ctx.closePath();ctx.fillStyle=c;ctx.fill();
+    }
+
+    function drawPromptCard(){
+      const active=game.mission && game.mission.depth>.10 && game.mission.depth<.98;
+      const type=active?game.mission.type:null;
+      const info=active?missionInfo[type]:null;
+      const w=game.w,h=game.h;
+      const cardW=Math.min(w*.70,440),cardH=Math.min(h*.15,92),x=w/2-cardW/2,y=14;
+      ctx.save();
+      ctx.globalAlpha=active?1:.78;
+      rr(x,y,cardW,cardH,24,active?"rgba(15,23,42,.78)":"rgba(15,23,42,.55)");
+      ctx.strokeStyle=active?info.color:"rgba(255,255,255,.18)";
+      ctx.lineWidth=active?4:2;ctx.strokeRect(x+2,y+2,cardW-4,cardH-4);
+      if(active){
+        circle(x+54,y+cardH/2,30,info.color);
+        drawIcon(info.icon,x+54,y+cardH/2,1);
+        text(info.ko,x+cardW/2,y+cardH*.43,30,"#fff",1000);
+        text(info.en,x+cardW/2,y+cardH*.75,14,info.color,1000);
+      }else{
+        const runPower = getRunPower();
+        const idleText = game.running ? (runPower>0.01 ? "달리기 리듬 유지!" : "제자리 달리기 시작!") : "시작 버튼을 누르세요";
+        text(idleText,w/2,y+cardH/2,24,"#fff",1000);
+      }
+      ctx.restore();
+    }
+
+    function drawIcon(kind,x,y,s){
+      ctx.save();ctx.translate(x,y);ctx.scale(s,s);
+      ctx.strokeStyle="#fff";ctx.fillStyle="#fff";ctx.lineWidth=5;ctx.lineCap="round";ctx.lineJoin="round";
+      if(kind==="hurdle"){ctx.beginPath();ctx.moveTo(-18,14);ctx.lineTo(-18,-8);ctx.lineTo(18,-8);ctx.lineTo(18,14);ctx.stroke();}
+      else if(kind==="bar"){rr(-22,-7,44,14,7,"#fff")}
+      else if(kind==="arrowL"){ctx.beginPath();ctx.moveTo(16,-16);ctx.lineTo(-14,0);ctx.lineTo(16,16);ctx.stroke();}
+      else if(kind==="arrowR"){ctx.beginPath();ctx.moveTo(-16,-16);ctx.lineTo(14,0);ctx.lineTo(-16,16);ctx.stroke();}
+      else if(kind==="target"){ctx.beginPath();ctx.arc(0,0,20,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(0,0,8,0,Math.PI*2);ctx.fill();}
+      else if(kind==="star"){star(0,0,5,23,10,"#fff")}
+      ctx.restore();
+    }
+
+    function drawScore(){
+      ctx.save();
+      ctx.textAlign="left";ctx.textBaseline="top";
+      ctx.font="1000 22px system-ui";ctx.fillStyle="#fff";ctx.fillText(Math.floor(game.score)+"",12,game.h-76);
+      ctx.font="900 14px system-ui";ctx.fillStyle="#fde68a";ctx.fillText("STREAK "+game.streak,12,game.h-48);
+      ctx.fillStyle="#fb7185";ctx.fillText("MISS "+game.miss,12,game.h-28);
+      ctx.restore();
+    }
+
+    function drawMessage(){
+      ctx.save();
+      const a=game.messageTime>9999?1:clamp(game.messageTime/500,0,1);
+      ctx.globalAlpha=a;
+      text(game.message,game.w/2,game.h*.53,42,game.message==="GOOD!"?"#86efac":game.message==="MISS!"?"#fb7185":"#facc15",1000);
+      ctx.restore();
+    }
+
+    function getRunPower(){
+      // 실제 제자리 달리기 입력이 약하면 게임 진행을 멈춘다.
+      // 0.18 이하는 정지, 그 이상부터 부드럽게 진행.
+      if(!game.running) return 0;
+      return clamp((input.runIntensity - 0.18) / 0.62, 0, 1);
+    }
+
+    function update(dt,t){
+      const runPower = getRunPower();
+
+      // 시작 전에는 배경만 아주 느리게 숨 쉬듯 움직이고, 시작 후에는 달릴 때만 진행한다.
+      const idleDrift = game.running ? 0 : 0.10;
+      game.bgOffset += dt * (idleDrift + runPower * 0.88);
+
+      game.laneVisual=lerp(game.laneVisual,game.targetLane,Math.min(1,dt*10));
+      if(game.messageTime>0&&game.messageTime<99999)game.messageTime-=dt*1000;
+
+      if(!game.running)return;
+
+      handleInput(t);
+
+      if(runPower <= 0.01){
+        if(!game.mission){
+          game.message = "제자리 달리기 시작!";
+          game.messageTime = 999999;
+        } else {
+          game.message = "달려야 미션이 다가와요!";
+          game.messageTime = 999999;
+        }
+        if(t>game.actionUntil&&game.state!=="RUN")game.state="RUN";
+        return;
+      }
+
+      if(game.messageTime > 9999) game.messageTime = 0;
+
+      // 달리는 강도에 비례해서만 점수와 미션 진행.
+      game.score+=dt*runPower*(12+input.runIntensity*34+game.streak*.8);
+
+      if(!game.mission){
+        game.nextMission-=dt*runPower;
+        if(game.nextMission<=0)spawnMission();
+      }else{
+        const speed=(.28+input.runIntensity*.34+Math.min(.20,game.score/7000))*runPower;
+        game.mission.depth+=dt*speed;
+        game.missionTime+=dt*runPower;
+        if(!game.mission.checked && game.mission.depth>.88)checkMission();
+        if(game.mission.depth>1.08){
+          game.mission=null;
+          game.nextMission=.32+Math.random()*.38;
+        }
+      }
+
+      if(t>game.actionUntil&&game.state!=="RUN")game.state="RUN";
+    }
+
+    function handleInput(t){
+      if(input.laneDelta!==0&&t-game.lastAction.lane>230){
+        game.targetLane=clamp(game.targetLane+input.laneDelta,0,2);
+        game.lane=game.targetLane;
+        game.lastAction.lane=t;input.laneDelta=0;
+      }
+      if(input.jump&&t-game.lastAction.jump>520){game.state="JUMP";game.actionUntil=t+520;game.lastAction.jump=t;input.jump=false}
+      if(input.crouch){game.state="CROUCH";game.actionUntil=t+210}
+      if(input.punch&&t-game.lastAction.punch>400){game.state="PUNCH";game.actionUntil=t+380;game.lastAction.punch=t;input.punch=false}
+      if(input.pose&&t-game.lastAction.pose>650){game.state="POSE";game.actionUntil=t+560;game.lastAction.pose=t;input.pose=false}
+    }
+
+    function spawnMission(){
+      const types=["jump","crouch","left","right","punch","pose"];
+      const type=types[Math.floor(Math.random()*types.length)];
+      let lane=game.lane;
+      if(type==="left")lane=Math.max(0,game.lane-1);
+      if(type==="right")lane=Math.min(2,game.lane+1);
+      if(type!=="left"&&type!=="right")lane=Math.floor(Math.random()*3);
+      game.mission={type,lane,depth:.05,checked:false};
+      game.missionTime=0;
+    }
+
+    function checkMission(){
+      const m=game.mission;if(!m)return;
+      m.checked=true;
+      let ok=false;
+      if(m.type==="left")ok=game.lane===m.lane;
+      else if(m.type==="right")ok=game.lane===m.lane;
+      else if(m.type==="jump")ok=(game.lane!==m.lane)||game.state==="JUMP";
+      else if(m.type==="crouch")ok=(game.lane!==m.lane)||game.state==="CROUCH";
+      else if(m.type==="punch")ok=(game.lane!==m.lane)||game.state==="PUNCH";
+      else if(m.type==="pose")ok=(game.lane!==m.lane)||game.state==="POSE";
+
+      if(ok){
+        game.streak++;game.score+=120+game.streak*10;game.message="GOOD!";game.messageTime=520;vibrate(25);
+      }else{
+        game.miss++;game.streak=0;game.message="MISS!";game.messageTime=520;vibrate(80);
+      }
+    }
+
+    function loop(t){
+      const dt=Math.min(.033,(t-game.last)/1000);game.last=t;
+      update(dt,t);draw();requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+
+    async function startCameraSoft(){
+      if(webcamReady)return;
+      try{
+        setPill(ui.cameraState,"CAM 권한","warn");
+        if(!poseLandmarker)await initPose();
+        const portrait=innerHeight>innerWidth;
+        const stream=await navigator.mediaDevices.getUserMedia({
+          video:{width:{ideal:portrait?360:480},height:{ideal:portrait?640:360},facingMode:"user",frameRate:{ideal:24,max:30}},
+          audio:false
+        });
+        ui.video.srcObject=stream;
+        await new Promise(res=>ui.video.onloadedmetadata=res);
+        await ui.video.play();
+        webcamReady=true;setPill(ui.cameraState,"CAM 작동","ok");requestAnimationFrame(poseLoop);
+      }catch(e){
+        console.error(e);setPill(ui.cameraState,"CAM 실패","bad");setPill(ui.poseState,"버튼 가능","warn");
+      }
+    }
+    async function initPose(){
+      setPill(ui.poseState,"POSE 로딩","warn");
+      const vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm");
+      poseLandmarker=await PoseLandmarker.createFromOptions(vision,{
+        baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",delegate:"GPU"},
+        runningMode:"VIDEO",numPoses:1,minPoseDetectionConfidence:.5,minPosePresenceConfidence:.5,minTrackingConfidence:.5
+      });
+      drawingUtils=new DrawingUtils(poseCtx);setPill(ui.poseState,"POSE 준비","ok");
+    }
+
+    ui.calibrateBtn.addEventListener("click",calibrate);
+    function calibrate(){
+      if(!hist.center.length){game.message="카메라 인식 후 보정";game.messageTime=900;return}
+      const c=hist.center[hist.center.length-1];
+      baseline.centerX=c.x;baseline.centerY=c.y;baseline.bodyHeight=c.bodyHeight||.45;baseline.ready=true;
+      setPill(ui.calibState,"CAL 완료","ok");vibrate([30,20,30]);
+    }
+
+    function poseLoop(){
+      if(!webcamReady||!poseLandmarker)return;
+      poseSkip=(poseSkip+1)%2;
+      if(poseSkip===0&&ui.video.currentTime!==lastVideoTime){
+        lastVideoTime=ui.video.currentTime;
+        const result=poseLandmarker.detectForVideo(ui.video,performance.now());
+        const l=result.landmarks?.[0];
+        if(l){setPill(ui.poseState,"POSE 인식","ok");drawPose(l);detectGesture(l)}
+        else{setPill(ui.poseState,"사람 없음","warn");ui.gestureState.textContent="NO PERSON";poseCtx.clearRect(0,0,ui.poseCanvas.width,ui.poseCanvas.height)}
+      }
+      requestAnimationFrame(poseLoop);
+    }
+    function lm(a,i){return a[i]}
+    function avg(ps){const v=ps.filter(Boolean);if(!v.length)return{x:.5,y:.5};return{x:v.reduce((s,p)=>s+p.x,0)/v.length,y:v.reduce((s,p)=>s+p.y,0)/v.length}}
+    function metrics(l){
+      const ls=lm(l,11),rs=lm(l,12),lh=lm(l,23),rh=lm(l,24),lk=lm(l,25),rk=lm(l,26),lw=lm(l,15),rw=lm(l,16);
+      const shoulders=avg([ls,rs]),hips=avg([lh,rh]),knees=avg([lk,rk]),center=avg([ls,rs,lh,rh]);
+      return{ls,rs,lh,rh,lk,rk,lw,rw,shoulders,hips,knees,center,bodyHeight:Math.abs(shoulders.y-hips.y)+Math.abs(hips.y-knees.y)};
+    }
+    function detectGesture(l){
+      const m=metrics(l);push(hist.center,{x:m.center.x,y:m.center.y,bodyHeight:m.bodyHeight,time:now()},18);
+      push(hist.kneeY,{diff:Math.abs(m.lk.y-m.rk.y),time:now()},18);
+      input.laneDelta=0;input.jump=false;if(!input.mobile.crouchHold)input.crouch=false;input.punch=false;input.pose=false;
+      const t=now(),names=[],baseX=baseline.ready?baseline.centerX:.5,baseY=baseline.ready?baseline.centerY:m.center.y;
+      const bodyScale=clamp(baseline.bodyHeight||m.bodyHeight||.45,.25,.7);
+      const dx=m.center.x-baseX,dy=m.center.y-baseY;
+      if(baseline.ready&&t-hist.lastLane>430){if(dx<-.14){input.laneDelta=-1;hist.lastLane=t;names.push("LEFT")}else if(dx>.14){input.laneDelta=1;hist.lastLane=t;names.push("RIGHT")}}
+      if(baseline.ready&&dy<bodyScale*-.11&&t-hist.lastJump>650){input.jump=true;hist.lastJump=t;names.push("JUMP")}
+      if(baseline.ready&&dy>bodyScale*.13){input.crouch=true;names.push("CROUCH")}
+      const bothUp=m.lw.y<m.ls.y-.07&&m.rw.y<m.rs.y-.07;
+      if(bothUp&&t-hist.lastPose>850){input.pose=true;hist.lastPose=t;names.push("POSE")}
+      const lp=m.lw.x>m.ls.x+.22&&Math.abs(m.lw.y-m.ls.y)<.25;
+      const rp=m.rw.x<m.rs.x-.22&&Math.abs(m.rw.y-m.rs.y)<.25;
+      if((lp||rp)&&t-hist.lastPunch>470){input.punch=true;hist.lastPunch=t;names.push("PUNCH")}
+      let run=0;
+      if(hist.kneeY.length>=8){
+        const r=hist.kneeY.slice(-8),av=r.reduce((s,p)=>s+p.diff,0)/r.length;
+        const variance=r.reduce((s,p)=>s+Math.abs(p.diff-av),0)/r.length;
+        run=clamp((variance-.01)/.075,0,1);
+      }
+      input.runIntensity=run;ui.runSpeedText.textContent=Math.round(run*100)+"%";ui.runBar.style.width=Math.round(run*100)+"%";
+      input.lastGesture=names.join(" + ")||(run>.2?"RUN":"NONE");ui.gestureState.textContent=input.lastGesture;
+    }
+    function drawPose(l){
+      const r=ui.poseCanvas.getBoundingClientRect();
+      const w=ui.poseCanvas.width=Math.max(96,Math.floor(r.width*.75)),h=ui.poseCanvas.height=Math.max(128,Math.floor(r.height*.75));
+      poseCtx.clearRect(0,0,w,h);if(!drawingUtils)return;
+      drawingUtils.drawConnectors(l,PoseLandmarker.POSE_CONNECTIONS,{color:"#38bdf8",lineWidth:2});
+      drawingUtils.drawLandmarks(l,{color:"#86efac",lineWidth:1,radius:2});
+    }
+  </script>
+</body>
+</html>
