@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+<title>Full 3D Camera Runner v12</title>
+<style>
+:root{--safeTop:env(safe-area-inset-top,0px);--safeBottom:env(safe-area-inset-bottom,0px);--good:#86efac;--warn:#fde68a;--bad:#fb7185}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#07101f;color:#f8fafc;font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;touch-action:manipulation}
+#app{width:100vw;height:100dvh;padding:calc(6px + var(--safeTop)) 6px calc(6px + var(--safeBottom));display:grid;grid-template-rows:auto 1fr auto;gap:6px;background:radial-gradient(circle at top,#1e4b78 0%,#0c1729 55%,#030712 100%)}
+#topBar{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;padding:8px 10px;border-radius:18px;background:linear-gradient(135deg,rgba(56,189,248,.2),rgba(255,255,255,.08));border:1px solid rgba(255,255,255,.14)}
+h1{margin:0;font-size:clamp(16px,4vw,22px);letter-spacing:-.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub{font-size:11px;color:#cbd5e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#statusMini{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.pill{padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.1);font-size:11px;font-weight:900;white-space:nowrap}
+.ok{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+#stage{position:relative;min-height:0;border-radius:22px;overflow:hidden;border:1px solid rgba(255,255,255,.14);background:#0f172a;box-shadow:0 18px 48px rgba(0,0,0,.38)}
+#fallbackCanvas{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;background:#79d7ff}
+#threeHost{position:absolute;inset:0;z-index:2;pointer-events:none}
+#threeHost canvas{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;display:block!important}
+#rendererBadge{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);z-index:12;padding:5px 9px;border-radius:999px;background:rgba(15,23,42,.7);border:1px solid rgba(255,255,255,.16);font-size:10px;font-weight:900;color:#cbd5e1;pointer-events:none}
+#cameraFloat{position:absolute;right:8px;top:8px;width:min(22vw,108px);aspect-ratio:3/4;z-index:8;border-radius:16px;overflow:hidden;background:#020617;border:1px solid rgba(255,255,255,.22);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+video,#poseCanvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1)}
+#poseCanvas{pointer-events:none}
+#hud{position:absolute;left:8px;top:8px;z-index:7;display:flex;flex-direction:column;gap:5px;pointer-events:none}
+.hudCard{width:fit-content;max-width:calc(100vw - 160px);padding:7px 9px;border-radius:14px;background:rgba(2,6,23,.55);border:1px solid rgba(255,255,255,.13);font-size:12px;font-weight:900;line-height:1.25}
+#runMeter{width:120px;height:8px;border-radius:999px;background:rgba(255,255,255,.18);overflow:hidden;margin-top:4px}
+#runBar{height:100%;width:0%;background:linear-gradient(90deg,#86efac,#38bdf8,#facc15);border-radius:999px}
+#missionCard{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:6;width:min(72vw,430px);min-height:74px;border-radius:24px;background:rgba(15,23,42,.70);border:3px solid rgba(255,255,255,.20);display:flex;align-items:center;justify-content:center;gap:12px;box-shadow:0 14px 36px rgba(0,0,0,.30);padding:8px 16px;pointer-events:none}
+#missionIcon{width:46px;height:46px;border-radius:999px;background:#38bdf8;display:flex;align-items:center;justify-content:center;font-size:25px;font-weight:1000;color:white;flex:0 0 auto}
+#missionText{font-size:clamp(22px,5vw,34px);font-weight:1000;letter-spacing:-.05em}
+#missionSub{font-size:12px;font-weight:1000;color:#cbd5e1;text-align:center;margin-top:-4px}
+#centerMessage{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;font-size:clamp(34px,8vw,64px);font-weight:1000;color:#facc15;text-shadow:0 5px 22px rgba(0,0,0,.55);pointer-events:none;white-space:nowrap}
+#controlPanel{display:grid;grid-template-columns:1fr 1.05fr;gap:6px}
+.controlBlock{padding:7px;border-radius:18px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.13)}
+#moveButtons{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+#actionButtons{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+button{appearance:none;border:0;min-height:43px;border-radius:15px;padding:8px;color:#052033;background:linear-gradient(135deg,#7dd3fc,#38bdf8);font-weight:1000;font-size:13px;box-shadow:0 10px 24px rgba(56,189,248,.25);touch-action:manipulation;user-select:none}
+button.secondary{background:rgba(255,255,255,.13);color:#fff;border:1px solid rgba(255,255,255,.14);box-shadow:none}
+button.warnBtn{background:linear-gradient(135deg,#fde68a,#facc15);color:#3f2b06}
+button.danger{background:linear-gradient(135deg,#fda4af,#fb7185);color:#3f0713}
+.tiny{font-size:10px;color:#cbd5e1;line-height:1.25;margin-top:5px}
+#helpDrawer{position:fixed;left:8px;right:8px;bottom:calc(8px + var(--safeBottom));z-index:30;display:none;max-height:62dvh;overflow:auto;padding:14px;border-radius:22px;background:rgba(15,23,42,.96);border:1px solid rgba(255,255,255,.16)}
+#helpDrawer.open{display:block}
+#helpDrawer h2{margin:0 0 8px;font-size:18px}
+#helpDrawer p{margin:8px 0;color:#cbd5e1;font-size:13px;line-height:1.5}
+@media (orientation:landscape) and (max-height:560px){#app{grid-template-rows:auto 1fr;grid-template-columns:1fr 252px}#topBar{grid-column:1/-1}#controlPanel{grid-template-columns:1fr;align-self:stretch}#cameraFloat{width:min(16vw,94px);aspect-ratio:4/3}#missionCard{width:min(52vw,380px);min-height:60px}}
+@media (min-width:900px){#app{max-width:1180px;margin:0 auto;grid-template-columns:1fr 320px;grid-template-rows:auto 1fr}#topBar{grid-column:1/-1}#controlPanel{grid-template-columns:1fr;align-self:stretch}}
+</style>
+</head>
+<body>
+<div id="app">
+<header id="topBar">
+<div><h1>Full 3D Camera Runner v12</h1><div class="sub">전신/상체 분리 인식 / 걷기·달리기 별도 / 캐릭터 포즈 미러링</div></div>
+<div id="statusMini"><span id="cameraState" class="pill bad">CAM 대기</span><span id="poseState" class="pill bad">POSE 대기</span><span id="calibState" class="pill warn">CAL 필요</span></div>
+</header>
+<main id="stage">
+<canvas id="fallbackCanvas"></canvas>
+<div id="threeHost"></div>
+<div id="rendererBadge">Renderer: Canvas fallback ready</div>
+<div id="missionCard"><div id="missionIcon">▶</div><div><div id="missionText">시작</div><div id="missionSub">시작 버튼을 누르세요</div></div></div>
+<div id="centerMessage">START</div>
+<div id="hud"><div class="hudCard">입력: <span id="gestureState">NONE</span></div><div class="hudCard">달리기: <span id="runSpeedText">0%</span><div id="runMeter"><div id="runBar"></div></div></div><div class="hudCard">점수: <span id="scoreText">0</span> / 콤보: <span id="comboText">0</span></div><div class="hudCard">감지: <span id="debugText">MODE ? / MOTION ? / BODY 0 / HAND 0 / KNEE 0</span></div></div>
+<div id="cameraFloat"><video id="webcam" autoplay playsinline muted></video><canvas id="poseCanvas"></canvas></div>
+</main>
+<section id="controlPanel">
+<div class="controlBlock"><div id="moveButtons"><button id="btnLeft" class="secondary">← 왼쪽</button><button id="btnRight" class="secondary">오른쪽 →</button></div><div class="tiny">화면이 안 보이는 기기에서도 Canvas 3D 대체 화면은 항상 표시됩니다.</div></div>
+<div class="controlBlock"><div id="actionButtons"><button id="startBtn">시작</button><button id="calibrateBtn" class="warnBtn">보정</button><button id="helpBtn" class="secondary">도움말</button><button id="btnJump" class="secondary">점프</button><button id="btnCrouch" class="secondary">앉기</button><button id="btnPunch" class="danger">펀치</button></div></div>
+</section>
+</div>
+<aside id="helpDrawer"><h2>v12 포즈 미러링 버전</h2><p>아래 Renderer 표시가 WebGL active면 Three.js가 켜진 상태입니다.</p><p>Canvas fallback이면 모바일에서 WebGL 표시가 불안정해서 Canvas 3D 대체 화면이 보이는 상태입니다.</p><p>전신이 보일 때는 다리/무릎 중심으로, 상체만 보일 때는 어깨/머리/손목 중심으로 인식합니다. 머리와 팔 움직임은 캐릭터에 실시간 반영됩니다.</p><p>GitHub Pages에 올린 뒤 <b>?v=12</b>을 붙여 접속하세요.</p><button id="closeHelpBtn" class="secondary" style="width:100%;margin-top:8px">닫기</button></aside>
+
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js";
+import { PoseLandmarker, FilesetResolver, DrawingUtils } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/vision_bundle.mjs";
+
+const $=id=>document.getElementById(id);
+const ui={host:$("threeHost"),fb:$("fallbackCanvas"),badge:$("rendererBadge"),video:$("webcam"),poseCanvas:$("poseCanvas"),startBtn:$("startBtn"),calibrateBtn:$("calibrateBtn"),helpBtn:$("helpBtn"),closeHelpBtn:$("closeHelpBtn"),helpDrawer:$("helpDrawer"),cameraState:$("cameraState"),poseState:$("poseState"),calibState:$("calibState"),gestureState:$("gestureState"),runSpeedText:$("runSpeedText"),runBar:$("runBar"),scoreText:$("scoreText"),comboText:$("comboText"),debugText:$("debugText"),missionIcon:$("missionIcon"),missionText:$("missionText"),missionSub:$("missionSub"),missionCard:$("missionCard"),centerMessage:$("centerMessage"),btnLeft:$("btnLeft"),btnRight:$("btnRight"),btnJump:$("btnJump"),btnCrouch:$("btnCrouch"),btnPunch:$("btnPunch")};
+const fctx=ui.fb.getContext("2d"), poseCtx=ui.poseCanvas.getContext("2d");
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v)),lerp=(a,b,t)=>a+(b-a)*t,now=()=>performance.now();
+const setPill=(el,t,c)=>{el.textContent=t;el.className="pill "+c},vibrate=p=>{if(navigator.vibrate)navigator.vibrate(p)},push=(a,x,m=18)=>{a.push(x);while(a.length>m)a.shift()};
+const input={laneDelta:0,jump:false,crouch:false,punch:false,pose:false,runIntensity:0,lastGesture:"NONE",mobile:{crouchHold:false}};
+const baseline={ready:false,centerX:.5,centerY:.5,bodyHeight:.45};
+const hist={center:[],kneeY:[],lastLane:0,lastJump:0,lastPunch:0,lastPose:0};
+const missions={walk:{ko:"걷기!",en:"WALK",icon:"歩",color:"#34d399"},run:{ko:"달리기!",en:"RUN",icon:"疾",color:"#38bdf8"},jump:{ko:"점프!",en:"JUMP",icon:"↟",color:"#fb923c"},crouch:{ko:"숙여!",en:"DUCK",icon:"▔",color:"#facc15"},left:{ko:"왼쪽!",en:"LEFT",icon:"←",color:"#60a5fa"},right:{ko:"오른쪽!",en:"RIGHT",icon:"→",color:"#60a5fa"},punch:{ko:"펀치!",en:"PUNCH",icon:"拳",color:"#fb7185"},armsOpen:{ko:"팔 벌리기!",en:"ARMS OPEN",icon:"T",color:"#c084fc"},pose:{ko:"포즈 따라하기!",en:"MATCH THE POSE",icon:"人",color:"#c084fc"}};
+const game={running:false,lane:1,targetLane:1,laneVisual:1,score:0,combo:0,miss:0,state:"RUN",actionUntil:0,lastAction:{lane:0,jump:0,punch:0,pose:0},mission:null,nextMission:.4,message:"START",messageTime:999999,last:performance.now(),webgl:false};
+
+function resize(){const r=ui.fb.getBoundingClientRect(),d=Math.min(devicePixelRatio||1,2);ui.fb.width=Math.max(1,Math.floor(r.width*d));ui.fb.height=Math.max(1,Math.floor(r.height*d));fctx.setTransform(d,0,0,d,0,0);if(renderer&&camera){renderer.setSize(Math.max(1,r.width),Math.max(1,r.height),false);camera.aspect=Math.max(1,r.width)/Math.max(1,r.height);camera.updateProjectionMatrix()}}
+addEventListener("resize",resize);setTimeout(resize,50);setTimeout(resize,300);
+
+let renderer=null,scene=null,camera=null,player=null,missionMesh=null,roadLines=[],trees=[];
+try{
+  const gl=document.createElement("canvas").getContext("webgl2")||document.createElement("canvas").getContext("webgl");
+  if(!gl) throw new Error("No WebGL");
+  scene=new THREE.Scene();scene.background=new THREE.Color(0x79d7ff);scene.fog=new THREE.Fog(0x79d7ff,16,68);
+  camera=new THREE.PerspectiveCamera(58,1,.1,120);camera.position.set(0,5.2,9.5);camera.lookAt(0,1.4,-8);
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,powerPreference:"high-performance",preserveDrawingBuffer:true});
+  renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.4));renderer.setClearColor(0x79d7ff,1);ui.host.appendChild(renderer.domElement);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x2f6b42,2.0));
+  const dl=new THREE.DirectionalLight(0xffffff,1.7);dl.position.set(4,8,5);scene.add(dl);
+  const roadMat=new THREE.MeshStandardMaterial({color:0x405876,roughness:.85}),grassMat=new THREE.MeshStandardMaterial({color:0x2fad63,roughness:.9});
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(70,140),grassMat);ground.rotation.x=-Math.PI/2;ground.position.set(0,-.05,-34);scene.add(ground);
+  const road=new THREE.Mesh(new THREE.BoxGeometry(8.5,.16,120),roadMat);road.position.set(0,0,-38);scene.add(road);
+  const sideMat=new THREE.MeshStandardMaterial({color:0x2aa5c9,roughness:.65});for(const x of[-4.45,4.45]){const s=new THREE.Mesh(new THREE.BoxGeometry(.25,.22,120),sideMat);s.position.set(x,.12,-38);scene.add(s)}
+  const lineMat=new THREE.MeshBasicMaterial({color:0xe5edf7});for(let i=0;i<22;i++)for(const x of[-1.35,1.35]){const l=new THREE.Mesh(new THREE.BoxGeometry(.16,.05,1.45),lineMat);l.position.set(x,.16,-i*5.2);scene.add(l);roadLines.push(l)}
+  const treeMat=new THREE.MeshStandardMaterial({color:0x22c55e,roughness:.9}),trunkMat=new THREE.MeshStandardMaterial({color:0x8b5a2b,roughness:.9});for(let i=0;i<18;i++){const g=new THREE.Group();const tr=new THREE.Mesh(new THREE.CylinderGeometry(.12,.18,1.2,8),trunkMat);tr.position.y=.55;g.add(tr);const le=new THREE.Mesh(new THREE.SphereGeometry(.58,12,10),treeMat);le.position.y=1.35;le.scale.set(1.1,.85,1.1);g.add(le);g.position.set(i%2?-7.2:7.2,0,-i*6-8);scene.add(g);trees.push(g)}
+  const skin=new THREE.MeshStandardMaterial({color:0xffc785,roughness:.7}),shirt=new THREE.MeshStandardMaterial({color:0x57c7f2,roughness:.65}),legmat=new THREE.MeshStandardMaterial({color:0x159fe3,roughness:.65});
+  function cap(r,h,m){const g=new THREE.Group();const c=new THREE.Mesh(new THREE.CylinderGeometry(r,r,h,16),m);g.add(c);const t=new THREE.Mesh(new THREE.SphereGeometry(r,16,12),m);t.position.y=h/2;g.add(t);const b=t.clone();b.position.y=-h/2;g.add(b);return g}
+  player=new THREE.Group();scene.add(player);
+  const body=new THREE.Mesh(new THREE.SphereGeometry(.55,24,18),shirt);body.scale.set(.78,1.05,.58);body.position.y=1.55;player.body=body;player.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.36,24,18),skin);head.position.y=2.35;player.head=head;player.add(head);
+  player.armL=cap(.13,.86,skin);player.armL.position.set(-.55,1.45,0);player.add(player.armL);
+  player.armR=cap(.13,.86,skin);player.armR.position.set(.55,1.45,0);player.add(player.armR);
+  player.legL=cap(.16,.95,legmat);player.legL.position.set(-.25,.7,0);player.add(player.legL);
+  player.legR=cap(.16,.95,legmat);player.legR.position.set(.25,.7,0);player.add(player.legR);
+  player.position.set(0,0,2.6);
+  resize();game.webgl=true;ui.badge.textContent="Renderer: WebGL active";
+}catch(e){console.error(e);game.webgl=false;ui.host.style.display="none";ui.badge.textContent="Renderer: Canvas fallback"}
+
+function startGame(){game.running=true;game.score=0;game.combo=0;game.lane=1;game.targetLane=1;game.laneVisual=1;game.mission=null;game.nextMission=.25;game.message="제자리 달리기!";game.messageTime=999999;ui.centerMessage.style.opacity="1";ui.centerMessage.textContent=game.message;ui.centerMessage.style.color="#facc15";ui.startBtn.textContent="재시작";showMission(null);startCameraSoft();vibrate([30,20,30])}
+ui.startBtn.onclick=startGame;ui.helpBtn.onclick=()=>ui.helpDrawer.classList.add("open");ui.closeHelpBtn.onclick=()=>ui.helpDrawer.classList.remove("open");
+function fire(n,d=180){if(n==="LEFT")input.laneDelta=-1;if(n==="RIGHT")input.laneDelta=1;if(n==="JUMP")input.jump=true;if(n==="PUNCH")input.punch=true;if(n==="POSE")input.pose=true;input.lastGesture=n;ui.gestureState.textContent=n;setTimeout(()=>{if(n==="LEFT"||n==="RIGHT")input.laneDelta=0;if(n==="JUMP")input.jump=false;if(n==="PUNCH")input.punch=false;if(n==="POSE")input.pose=false},d)}
+function bind(b,n){b.onpointerdown=e=>{e.preventDefault();vibrate(18);fire(n)}}
+bind(ui.btnLeft,"LEFT");bind(ui.btnRight,"RIGHT");bind(ui.btnJump,"JUMP");bind(ui.btnPunch,"PUNCH");
+ui.btnCrouch.onpointerdown=e=>{e.preventDefault();input.mobile.crouchHold=true;input.crouch=true;input.lastGesture="CROUCH";ui.gestureState.textContent="CROUCH";vibrate(18)};
+ui.btnCrouch.onpointerup=ui.btnCrouch.onpointercancel=()=>{input.mobile.crouchHold=false;input.crouch=false};
+
+function getRunPower(){return game.running?clamp((input.runIntensity-.08)/.50,0,1):0}
+function laneX(lane){return(lane-1)*2.45}
+function showMission(type){const d=missions[type];if(!d){ui.missionIcon.textContent="▶";ui.missionIcon.style.background="#38bdf8";ui.missionText.textContent=game.running?"제자리 달리기!":"시작";ui.missionSub.textContent=game.running?"달려야 앞으로 진행됩니다":"시작 버튼을 누르세요";ui.missionCard.style.borderColor="rgba(255,255,255,.20)";return}ui.missionIcon.textContent=d.icon;ui.missionIcon.style.background=d.color;ui.missionText.textContent=d.ko;ui.missionSub.textContent=d.en;ui.missionCard.style.borderColor=d.color}
+function spawnMission(){const types=["walk","run","jump","crouch","left","right","punch","armsOpen","pose"];const type=types[Math.floor(Math.random()*types.length)];let lane=game.lane;if(type==="left")lane=Math.max(0,game.lane-1);else if(type==="right")lane=Math.min(2,game.lane+1);else lane=Math.floor(Math.random()*3);game.mission={type,lane,z:-58,checked:false};showMission(type);if(game.webgl){if(missionMesh)scene.remove(missionMesh);missionMesh=createMissionMesh(type);missionMesh.position.set(laneX(lane),0,game.mission.z);scene.add(missionMesh)}}
+function createMissionMesh(type){
+  const g=new THREE.Group();
+  const mat=(c)=>new THREE.MeshStandardMaterial({color:c,roughness:.55});
+  if(type==="pose"||type==="armsOpen"){
+    const panel=new THREE.Mesh(new THREE.BoxGeometry(3.25,2.9,.26),mat(type==="armsOpen"?0x8b5cf6:0x7c3aed));panel.position.y=1.55;g.add(panel);
+    const white=mat(0xffffff);
+    const head=new THREE.Mesh(new THREE.SphereGeometry(.22,18,14),white);head.position.set(0,2.42,.18);g.add(head);
+    const torso=new THREE.Mesh(new THREE.CapsuleGeometry(.23,.68,6,16),white);torso.position.set(0,1.86,.18);g.add(torso);
+    if(type==="armsOpen"){
+      for(const [x,rz] of[[-.58,Math.PI/2],[.58,-Math.PI/2]]){const a=new THREE.Mesh(new THREE.CapsuleGeometry(.075,.95,5,12),white);a.position.set(x,2.05,.18);a.rotation.z=rz;g.add(a)}
+    }else{
+      for(const [x,rz] of[[-.42,-.78],[.42,.78]]){const a=new THREE.Mesh(new THREE.CapsuleGeometry(.075,.86,5,12),white);a.position.set(x,2.18,.18);a.rotation.z=rz;g.add(a)}
+    }
+    for(const [x,rz] of[[-.18,.16],[.18,-.16]]){const l=new THREE.Mesh(new THREE.CapsuleGeometry(.09,.74,5,12),white);l.position.set(x,1.17,.18);l.rotation.z=rz;g.add(l)}
+  }else if(type==="walk"||type==="run"){
+    const color=type==="walk"?0x34d399:0x38bdf8;
+    const gate=new THREE.Mesh(new THREE.TorusGeometry(1.25,.08,12,40),mat(color));gate.position.y=1.35;gate.rotation.x=Math.PI/2;g.add(gate);
+    const arrow=new THREE.Mesh(new THREE.ConeGeometry(.45,1.1,3),mat(color));arrow.position.set(0,1.35,.2);arrow.rotation.x=Math.PI/2;g.add(arrow);
+  }else if(type==="jump"){
+    const b=new THREE.Mesh(new THREE.BoxGeometry(2.2,.42,.6),mat(0xfb923c));b.position.y=.45;g.add(b);
+  }else if(type==="crouch"){
+    const b=new THREE.Mesh(new THREE.BoxGeometry(3.1,.32,.55),mat(0xfacc15));b.position.y=2.35;g.add(b);
+  }else if(type==="punch"){
+    const b=new THREE.Mesh(new THREE.SphereGeometry(.75,24,18),mat(0xe11d48));b.position.y=1.2;g.add(b);
+  }else{
+    const b=new THREE.Mesh(new THREE.BoxGeometry(2.5,2.6,.7),mat(0x64748b));b.position.y=1.3;g.add(b);
+  }
+  return g
+}
+function handleInput(t){
+  if(input.laneDelta&&t-game.lastAction.lane>230){game.targetLane=clamp(game.targetLane+input.laneDelta,0,2);game.lane=game.targetLane;game.lastAction.lane=t;input.laneDelta=0}
+  if((input.jump||input.gestureJump)&&t-game.lastAction.jump>520){game.state="JUMP";game.actionUntil=t+520;game.lastAction.jump=t;input.jump=false}
+  if(input.crouch||input.gestureCrouch){game.state="CROUCH";game.actionUntil=t+210}
+  if((input.punch||input.gesturePunch)&&t-game.lastAction.punch>400){game.state="PUNCH";game.actionUntil=t+380;game.lastAction.punch=t;input.punch=false}
+  if((input.pose||input.gestureArmsUp||input.gestureArmsOpen)&&t-game.lastAction.pose>650){game.state=input.gestureArmsOpen?"ARMS_OPEN":"POSE";game.actionUntil=t+560;game.lastAction.pose=t;input.pose=false}
+  if(t>game.actionUntil&&game.state!=="RUN")game.state="RUN"
+}
+function checkMission(){
+  const m=game.mission;if(!m||m.checked)return;m.checked=true;
+  let ok=false;
+  if(m.type==="walk")ok=input.motionType==="WALK"||input.motionType==="RUN";
+  else if(m.type==="run")ok=input.motionType==="RUN";
+  else if(m.type==="left"||m.type==="right")ok=game.lane===m.lane;
+  else if(m.type==="jump")ok=(game.lane!==m.lane)||input.gestureJump||game.state==="JUMP";
+  else if(m.type==="crouch")ok=(game.lane!==m.lane)||input.gestureCrouch||game.state==="CROUCH";
+  else if(m.type==="punch")ok=(game.lane!==m.lane)||input.gesturePunch||game.state==="PUNCH";
+  else if(m.type==="armsOpen")ok=input.gestureArmsOpen;
+  else if(m.type==="pose")ok=input.gestureArmsUp||input.gestureArmsOpen||game.state==="POSE";
+  if(ok){game.combo++;game.score+=120+game.combo*12;game.message="GOOD!";game.messageTime=520;ui.centerMessage.style.color="#86efac";vibrate(25)}
+  else{game.combo=0;game.miss++;game.message="MISS!";game.messageTime=540;ui.centerMessage.style.color="#fb7185";vibrate(80)}
+}
+function update(dt,t){handleInput(t);const run=getRunPower();if(game.running&&run<=.01){game.message="제자리 달리기!";game.messageTime=999999}else if(game.messageTime>9999&&run>.01)game.messageTime=0;if(game.running&&run>.01){game.score+=dt*run*(14+input.runIntensity*34+game.combo);game.nextMission-=dt*run;if(!game.mission&&game.nextMission<=0)spawnMission();if(game.mission){game.mission.z+=dt*run*21;if(missionMesh)missionMesh.position.z=game.mission.z;if(!game.mission.checked&&game.mission.z>1.8)checkMission();if(game.mission.z>7.5){if(missionMesh){scene.remove(missionMesh);missionMesh=null}game.mission=null;game.nextMission=.35+Math.random()*.55;showMission(null)}}}if(game.messageTime>0&&game.messageTime<99999)game.messageTime-=dt*1000;ui.scoreText.textContent=Math.floor(game.score);ui.comboText.textContent=game.combo;if(game.messageTime>0){ui.centerMessage.textContent=game.message;ui.centerMessage.style.opacity=String(clamp(game.messageTime/520,0,1))}else ui.centerMessage.style.opacity="0";if(!game.mission)showMission(null)}
+function animateThree(dt,t){
+  if(!game.webgl||!renderer)return;
+  const run=getRunPower(),move=dt*(game.running?run:0)*18;
+  roadLines.forEach(l=>{l.position.z+=move;if(l.position.z>8)l.position.z-=22*5.2});
+  trees.forEach((tr,i)=>{tr.position.z+=move;if(tr.position.z>10){tr.position.z-=18*6;tr.position.x=(i%2?-7.2:7.2)+(Math.random()-.5)*1.2}});
+  game.laneVisual=lerp(game.laneVisual,game.lane,Math.min(1,dt*10));
+  player.position.x=lerp(player.position.x,laneX(game.lane),Math.min(1,dt*10));
+
+  let jump=0,crouch=0;
+  if(game.state==="JUMP"){const ph=1-Math.max(0,game.actionUntil-t)/520;jump=Math.sin(ph*Math.PI)*1.45}
+  if(game.state==="CROUCH")crouch=.55;
+
+  // 캐릭터 포즈 미러링: 카메라에서 들어온 머리/팔 값을 3D 캐릭터에 반영
+  const rig=input.rig||{};
+  const mirrorStrength=input.visibleMode==="FULL_BODY"?0.9:0.75;
+
+  player.body.scale.y=1.05-crouch*.35;
+  player.body.position.y=1.55-crouch*.35+jump;
+  player.head.position.y=2.35-crouch*.65+jump;
+  player.head.rotation.y=lerp(player.head.rotation.y||0,(rig.headYaw||0)*0.8,0.35);
+  player.head.rotation.x=lerp(player.head.rotation.x||0,(rig.headPitch||0)*0.55,0.35);
+
+  const swing=Math.sin(t*.018*(1+run*2))*.45*run;
+  const leftArmZ=rig.leftArmZ!=null?rig.leftArmZ:.25;
+  const rightArmZ=rig.rightArmZ!=null?rig.rightArmZ:-.25;
+  const leftArmX=rig.leftArmX!=null?rig.leftArmX:-swing*.7;
+  const rightArmX=rig.rightArmX!=null?rig.rightArmX:swing*.7;
+
+  player.armL.rotation.z=lerp(player.armL.rotation.z,leftArmZ,0.35*mirrorStrength);
+  player.armR.rotation.z=lerp(player.armR.rotation.z,rightArmZ,0.35*mirrorStrength);
+  player.armL.rotation.x=lerp(player.armL.rotation.x,leftArmX,0.35*mirrorStrength);
+  player.armR.rotation.x=lerp(player.armR.rotation.x,rightArmX,0.35*mirrorStrength);
+  player.armL.position.y=game.state==="CROUCH"?1.2:1.45+jump;
+  player.armR.position.y=game.state==="CROUCH"?1.2:1.45+jump;
+
+  if(game.state==="PUNCH"){player.armR.rotation.x=-1.55;player.armR.rotation.z=-.05}
+  if(game.state==="POSE"){player.armL.rotation.z=2.55;player.armR.rotation.z=-2.55;player.armL.rotation.x=0;player.armR.rotation.x=0}
+  if(game.state==="ARMS_OPEN"){player.armL.rotation.z=1.55;player.armR.rotation.z=-1.55;player.armL.rotation.x=0;player.armR.rotation.x=0}
+
+  player.legL.rotation.x=swing;
+  player.legR.rotation.x=-swing;
+  player.legL.position.y=.7+jump;
+  player.legR.position.y=.7+jump;
+
+  renderer.render(scene,camera)
+}
+function drawFallback(){const r=ui.fb.getBoundingClientRect(),w=r.width,h=r.height;fctx.clearRect(0,0,w,h);const g=fctx.createLinearGradient(0,0,0,h);g.addColorStop(0,"#79d7ff");g.addColorStop(.45,"#49a9e7");g.addColorStop(.46,"#2fad63");g.addColorStop(1,"#17613b");fctx.fillStyle=g;fctx.fillRect(0,0,w,h);const c=w/2,top=h*.22,bottom=h+60;fctx.beginPath();fctx.moveTo(c-46,top);fctx.lineTo(w*.12,bottom);fctx.lineTo(w*.88,bottom);fctx.lineTo(c+46,top);fctx.closePath();fctx.fillStyle="#405876";fctx.fill();fctx.strokeStyle="rgba(255,255,255,.35)";fctx.lineWidth=7;fctx.setLineDash([28,30]);fctx.lineDashOffset=-(game.score*.6)%58;for(const off of[-.33,.33]){fctx.beginPath();fctx.moveTo(c+off*34,top+20);fctx.lineTo(c+off*w*.28,bottom);fctx.stroke()}fctx.setLineDash([]);if(game.mission)drawMission2D(game.mission,w,h);const x=c+(game.laneVisual-1)*w*.23;let y=h-120;if(game.state==="JUMP")y-=70*Math.sin((1-Math.max(0,game.actionUntil-now())/520)*Math.PI);const crouch=game.state==="CROUCH"?30:0;ellipse(x,y+65,56,14,"rgba(0,0,0,.25)");circle(x,y-35+crouch,30,"#ffc785");ellipse(x,y+25+crouch,44,58-crouch*.7,"#57c7f2");rr(x-52,y+18+crouch,18,74,9,"#ffc785");rr(x+34,y+18+crouch,18,74,9,"#ffc785");rr(x-25,y+70,20,76,10,"#159fe3");rr(x+8,y+70,20,76,10,"#159fe3");if(game.state==="PUNCH")circle(x+55,y-10,23,"#fb7185");if(game.state==="POSE"){rr(x-70,y-65,18,86,9,"#ffc785");rr(x+52,y-65,18,86,9,"#ffc785")}}
+function rr(x,y,w,h,r,c){const q=Math.min(r,w/2,h/2);fctx.beginPath();fctx.moveTo(x+q,y);fctx.arcTo(x+w,y,x+w,y+h,q);fctx.arcTo(x+w,y+h,x,y+h,q);fctx.arcTo(x,y+h,x,y,q);fctx.arcTo(x,y,x+w,y,q);fctx.closePath();fctx.fillStyle=c;fctx.fill()}
+function circle(x,y,r,c){fctx.beginPath();fctx.arc(x,y,r,0,Math.PI*2);fctx.fillStyle=c;fctx.fill()}
+function ellipse(x,y,rx,ry,c){fctx.beginPath();fctx.ellipse(x,y,rx,ry,0,0,Math.PI*2);fctx.fillStyle=c;fctx.fill()}
+function drawMission2D(m,w,h){const d=clamp((m.z+58)/65,0,1),s=.25+d*1.45,x=w/2+(m.lane-1)*w*.23*d,y=h*.24+d*(h*.78);if(m.type==="pose"||m.type==="armsOpen"){rr(x-80*s,y-115*s,160*s,170*s,20*s,"#7c3aed");circle(x,y-72*s,14*s,"#fff");rr(x-14*s,y-55*s,28*s,50*s,14*s,"#fff");rr(x-58*s,y-67*s,18*s,70*s,9*s,"#fff");rr(x+40*s,y-67*s,18*s,70*s,9*s,"#fff")}else if(m.type==="walk"||m.type==="run"){circle(x,y,45*s,m.type==="walk"?"#34d399":"#38bdf8");}else if(m.type==="jump")rr(x-65*s,y-18*s,130*s,36*s,14*s,"#fb923c");else if(m.type==="crouch")rr(x-90*s,y-100*s,180*s,28*s,14*s,"#facc15");else if(m.type==="punch"){circle(x,y-30*s,45*s,"#fb7185");rr(x-55*s,y,110*s,70*s,25*s,"#e11d48")}else rr(x-55*s,y-90*s,110*s,150*s,22*s,"#64748b")}
+function loop(t){const dt=Math.min(.033,(t-game.last)/1000);game.last=t;update(dt,t);drawFallback();animateThree(dt,t);requestAnimationFrame(loop)}
+resize();requestAnimationFrame(loop);
+
+let poseLandmarker=null,drawingUtils=null,webcamReady=false,lastVideoTime=-1,poseSkip=0;
+async function startCameraSoft(){if(webcamReady)return;try{setPill(ui.cameraState,"CAM 권한","warn");if(!poseLandmarker)await initPose();const portrait=innerHeight>innerWidth;const stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:portrait?360:480},height:{ideal:portrait?640:360},facingMode:"user",frameRate:{ideal:24,max:30}},audio:false});ui.video.srcObject=stream;await new Promise(res=>ui.video.onloadedmetadata=res);await ui.video.play();webcamReady=true;setPill(ui.cameraState,"CAM 작동","ok");requestAnimationFrame(poseLoop)}catch(e){console.error(e);setPill(ui.cameraState,"CAM 실패","bad");setPill(ui.poseState,"버튼 가능","warn")}}
+async function initPose(){setPill(ui.poseState,"POSE 로딩","warn");const vision=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22-rc.20250304/wasm");poseLandmarker=await PoseLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task",delegate:"GPU"},runningMode:"VIDEO",numPoses:1,minPoseDetectionConfidence:.5,minPosePresenceConfidence:.5,minTrackingConfidence:.5});drawingUtils=new DrawingUtils(poseCtx);setPill(ui.poseState,"POSE 준비","ok")}
+ui.calibrateBtn.onclick=()=>{if(!hist.center.length){game.message="카메라 인식 후 보정";game.messageTime=900;ui.centerMessage.style.color="#facc15";return}const c=hist.center[hist.center.length-1];baseline.centerX=c.x;baseline.centerY=c.y;baseline.bodyHeight=c.bodyHeight||.45;baseline.ready=true;setPill(ui.calibState,"CAL 완료","ok");game.message="보정 완료";game.messageTime=650;ui.centerMessage.style.color="#86efac";vibrate([30,20,30])};
+function poseLoop(){if(!webcamReady||!poseLandmarker)return;poseSkip=(poseSkip+1)%2;if(poseSkip===0&&ui.video.currentTime!==lastVideoTime){lastVideoTime=ui.video.currentTime;const result=poseLandmarker.detectForVideo(ui.video,performance.now());const l=result.landmarks?.[0];if(l){setPill(ui.poseState,"POSE 인식","ok");drawPose(l);detectGesture(l)}else{setPill(ui.poseState,"사람 없음","warn");ui.gestureState.textContent="NO PERSON";poseCtx.clearRect(0,0,ui.poseCanvas.width,ui.poseCanvas.height)}}requestAnimationFrame(poseLoop)}
+function lm(a,i){return a[i]}function avg(ps){const v=ps.filter(Boolean);if(!v.length)return{x:.5,y:.5};return{x:v.reduce((s,p)=>s+p.x,0)/v.length,y:v.reduce((s,p)=>s+p.y,0)/v.length}}
+function metrics(l){
+  const nose=lm(l,0),ls=lm(l,11),rs=lm(l,12),lh=lm(l,23),rh=lm(l,24),lk=lm(l,25),rk=lm(l,26),la=lm(l,27),ra=lm(l,28),lw=lm(l,15),rw=lm(l,16);
+  const shoulders=avg([ls,rs]),hips=avg([lh,rh]),knees=avg([lk,rk]),ankles=avg([la,ra]),center=avg([ls,rs,lh,rh]);
+  const vis=p=>p&&((p.visibility==null?1:p.visibility)>.35)&&p.x>=-.05&&p.x<=1.05&&p.y>=-.05&&p.y<=1.08;
+  const fullBody=vis(lh)&&vis(rh)&&vis(lk)&&vis(rk)&&vis(la)&&vis(ra);
+  const upperBody=vis(ls)&&vis(rs)&&vis(lw)&&vis(rw);
+  return{nose,ls,rs,lh,rh,lk,rk,la,ra,lw,rw,shoulders,hips,knees,ankles,center,fullBody,upperBody,bodyHeight:Math.abs(shoulders.y-hips.y)+Math.abs(hips.y-knees.y)}
+}
+function detectGesture(l){
+  const m=metrics(l),t=now();
+  const mode=m.fullBody?"FULL_BODY":"UPPER_BODY";
+
+  push(hist.center,{
+    x:m.center.x,y:m.center.y,shoulderY:m.shoulders.y,noseX:m.nose?m.nose.x:m.center.x,noseY:m.nose?m.nose.y:m.center.y,
+    lwx:m.lw.x,lwy:m.lw.y,rwx:m.rw.x,rwy:m.rw.y,
+    kneeDiff:Math.abs(m.lk.y-m.rk.y),kneeY:(m.lk.y+m.rk.y)/2,
+    ankleDiff:Math.abs(m.la.y-m.ra.y),ankleY:(m.la.y+m.ra.y)/2,
+    bodyHeight:m.bodyHeight,time:t
+  },28);
+  push(hist.kneeY,{diff:Math.abs(m.lk.y-m.rk.y),y:(m.lk.y+m.rk.y)/2,time:t},28);
+
+  input.laneDelta=0;input.jump=false;if(!input.mobile.crouchHold)input.crouch=false;input.punch=false;input.pose=false;
+  input.gestureJump=false;input.gestureCrouch=false;input.gesturePunch=false;input.gestureArmsUp=false;input.gestureArmsOpen=false;
+  input.visibleMode=mode;
+
+  const names=[];
+  const baseX=baseline.ready?baseline.centerX:.5,baseY=baseline.ready?baseline.centerY:m.center.y;
+  const bodyScale=clamp(baseline.bodyHeight||m.bodyHeight||.45,.22,.75);
+  const dx=m.center.x-baseX,dy=m.center.y-baseY;
+
+  // 머리/팔 포즈 미러링 값
+  const shoulderWidth=Math.max(.12,Math.abs(m.ls.x-m.rs.x));
+  const shoulderMidX=(m.ls.x+m.rs.x)/2;
+  const shoulderMidY=(m.ls.y+m.rs.y)/2;
+  const headYaw=clamp(((m.nose?m.nose.x:shoulderMidX)-shoulderMidX)/shoulderWidth,-1,1);
+  const headPitch=clamp(((m.nose?m.nose.y:shoulderMidY)-shoulderMidY)/shoulderWidth,-1,1);
+  const leftDX=(m.lw.x-m.ls.x)/shoulderWidth,leftDY=(m.lw.y-m.ls.y)/shoulderWidth;
+  const rightDX=(m.rw.x-m.rs.x)/shoulderWidth,rightDY=(m.rw.y-m.rs.y)/shoulderWidth;
+  input.rig={
+    headYaw,headPitch,
+    leftArmZ:clamp(leftDX*1.25,-2.7,2.7),
+    rightArmZ:clamp(rightDX*1.25,-2.7,2.7),
+    leftArmX:clamp(leftDY*1.1,-1.8,1.8),
+    rightArmX:clamp(rightDY*1.1,-1.8,1.8)
+  };
+
+  // 좌우 이동
+  if(baseline.ready&&t-hist.lastLane>330){
+    if(dx<-.085){input.laneDelta=-1;hist.lastLane=t;names.push("LEFT")}
+    else if(dx>.085){input.laneDelta=1;hist.lastLane=t;names.push("RIGHT")}
+  }
+
+  // 점프/앉기: 전신이면 엉덩이/무릎도 참고, 상체면 중심 위치로 처리
+  const jumpThreshold=mode==="FULL_BODY"?bodyScale*-.075:bodyScale*-.060;
+  const crouchThreshold=mode==="FULL_BODY"?bodyScale*.105:bodyScale*.085;
+  if(baseline.ready&&dy<jumpThreshold&&t-hist.lastJump>520){input.jump=true;input.gestureJump=true;hist.lastJump=t;names.push("JUMP")}
+  if(baseline.ready&&dy>crouchThreshold){input.crouch=true;input.gestureCrouch=true;names.push("CROUCH")}
+
+  // 팔벌리기 T 포즈와 양팔 올리기 분리
+  const armsOpen=(Math.abs(m.lw.y-m.ls.y)<.13&&Math.abs(m.rw.y-m.rs.y)<.13&&m.lw.x<m.ls.x-.10&&m.rw.x>m.rs.x+.10);
+  const armsUp=(m.lw.y<m.ls.y-.025&&m.rw.y<m.rs.y-.025);
+  if(armsOpen&&t-hist.lastPose>650){input.gestureArmsOpen=true;hist.lastPose=t;names.push("ARMS_OPEN")}
+  else if(armsUp&&t-hist.lastPose>650){input.pose=true;input.gestureArmsUp=true;hist.lastPose=t;names.push("ARMS_UP")}
+
+  // 펀치
+  const leftPunch=(m.lw.x>m.ls.x+.12&&Math.abs(m.lw.y-m.ls.y)<.34)||(m.lw.x>m.center.x+.20);
+  const rightPunch=(m.rw.x<m.rs.x-.12&&Math.abs(m.rw.y-m.rs.y)<.34)||(m.rw.x<m.center.x-.20);
+  if((leftPunch||rightPunch)&&t-hist.lastPunch>340){input.punch=true;input.gesturePunch=true;hist.lastPunch=t;names.push("PUNCH")}
+
+  let bodyRun=0,handRun=0,kneeRun=0;
+  if(hist.center.length>=7){
+    const r=hist.center.slice(-14);
+    const range=arr=>Math.max(...arr)-Math.min(...arr);
+    const bodyRange=range(r.map(p=>p.y))+range(r.map(p=>p.shoulderY))*.7+range(r.map(p=>p.noseY))*.45;
+    let handMove=0;
+    for(let i=1;i<r.length;i++){
+      const a=r[i-1],b=r[i];
+      handMove+=Math.abs(b.lwy-a.lwy)+Math.abs(b.rwy-a.rwy)+(Math.abs(b.lwx-a.lwx)+Math.abs(b.rwx-a.rwx))*.45;
+    }
+    handMove/=Math.max(1,r.length-1);
+    bodyRun=clamp((bodyRange-.006)/.040,0,1);
+    handRun=clamp((handMove-.006)/.060,0,1);
+    if(mode==="FULL_BODY"){
+      const kneeRange=range(r.map(p=>p.kneeDiff))+range(r.map(p=>p.kneeY))*.5+range(r.map(p=>p.ankleY))*.35;
+      kneeRun=clamp((kneeRange-.006)/.055,0,1);
+    }
+  }
+
+  let rawRun=mode==="FULL_BODY"
+    ? Math.max(kneeRun,bodyRun*.75,handRun*.65)
+    : Math.max(bodyRun*.92,handRun*.88);
+
+  if(rawRun>.12)input.runHoldUntil=t+430;
+  const held=(input.runHoldUntil&&t<input.runHoldUntil)?0.25:0;
+  input.runSmooth=input.runSmooth==null?rawRun:(input.runSmooth*.58+rawRun*.42);
+  const run=clamp(Math.max(input.runSmooth,held),0,1);
+
+  input.runIntensity=run;
+  input.motionType=run>.46?"RUN":(run>.14?"WALK":"IDLE");
+
+  ui.runSpeedText.textContent=Math.round(run*100)+"%";
+  ui.runBar.style.width=Math.round(run*100)+"%";
+  if(ui.debugText)ui.debugText.textContent="MODE "+mode+" / MOTION "+input.motionType+" / BODY "+Math.round(bodyRun*100)+" / HAND "+Math.round(handRun*100)+" / KNEE "+Math.round(kneeRun*100);
+
+  const motionName=input.motionType==="RUN"?"RUN":input.motionType==="WALK"?"WALK":"NONE";
+  input.lastGesture=names.join(" + ")||motionName;
+  ui.gestureState.textContent=input.lastGesture;
+}
+function drawPose(l){const r=ui.poseCanvas.getBoundingClientRect();const w=ui.poseCanvas.width=Math.max(96,Math.floor(r.width*.75)),h=ui.poseCanvas.height=Math.max(128,Math.floor(r.height*.75));poseCtx.clearRect(0,0,w,h);if(!drawingUtils)return;drawingUtils.drawConnectors(l,PoseLandmarker.POSE_CONNECTIONS,{color:"#38bdf8",lineWidth:2});drawingUtils.drawLandmarks(l,{color:"#86efac",lineWidth:1,radius:2})}
+</script>
+</body>
+</html>
